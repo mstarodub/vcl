@@ -1,5 +1,6 @@
 .DS_Store
 __marimo__/
+wandb/
 data/
 # Python-generated files
 __pycache__/
