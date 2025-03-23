@@ -18,10 +18,10 @@ def _():
     import numpy as np
     import torchvision.datasets as datasets
     import torchvision.transforms.v2 as transforms
-    from tqdm.auto import tqdm
+    from tqdm.auto import tqdm, trange
     import matplotlib.pyplot as plt
     from dataclasses import dataclass
-    return F, dataclass, datasets, nn, np, plt, torch, tqdm, transforms
+    return F, dataclass, datasets, nn, np, plt, torch, tqdm, trange, transforms
 
 
 @app.cell
@@ -167,72 +167,6 @@ def _(lds):
 
 
 @app.cell
-def _(nn):
-    class Net(nn.Module):
-        def __init__(self, in_dim, hidden_dim, out_dim):
-            super().__init__()
-            self.linear = nn.Sequential(
-                nn.Linear(in_dim, hidden_dim),
-                nn.ReLU(),
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.ReLU(),
-                nn.Linear(hidden_dim, out_dim)
-            )
-
-        def forward(self, x):
-            return self.linear(x)
-    return (Net,)
-
-
-@app.cell
-def _(nn, np, torch, tqdm):
-    def accuracy(pred, target):
-        return (pred.argmax(dim=1) == target).sum() / pred.shape[0]
-
-    def train_epoch(model, loader, loss_fn, opt):
-        model.train()
-        losses, accuracies = [], []
-        for data, target in loader:
-            opt.zero_grad()
-            pred = model(data)
-            loss = loss_fn(pred, target)
-            acc = accuracy(pred, target)
-            loss.backward()
-            opt.step()
-            losses.append(loss.item())
-            accuracies.append(acc.item())
-        return np.mean(losses), np.mean(accuracies)
-
-    def train(model, train_loader, test_loader, num_epochs=100):
-        loss_fn = nn.CrossEntropyLoss()
-        opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
-        for i in tqdm(range(num_epochs)):
-            train_loss, train_acc = train_epoch(model, train_loader, loss_fn, opt)
-            test_loss, test_acc = infer(model, test_loader, loss_fn)
-            print(f"epoch {i}: train loss {train_loss:.4f} train acc {train_acc:.4f} test loss {test_loss:.4f} test acc {test_acc:.4f}")
-
-    @torch.no_grad()
-    def infer(model, loader, loss_fn):
-        model.eval()
-        losses, accuracies = [], []
-        for data, target in loader:
-            pred = model(data)
-            loss = loss_fn(pred, target)
-            acc = accuracy(pred, target)
-            losses.append(loss.item())
-            accuracies.append(acc.item())
-        return np.mean(losses), np.mean(accuracies)
-    return accuracy, infer, train, train_epoch
-
-
-@app.cell
-def _(Net, pmnist_task, train):
-    baseline_mnist = Net(28*28, 100, 10)
-    train(baseline_mnist, *pmnist_task(permute=False), 30)
-    return (baseline_mnist,)
-
-
-@app.cell
 def _(Net, pmnist_task_loaders, train):
     baseline_pmnist = Net(28*28, 10)
     for train_loader, test_loader in pmnist_task_loaders():
@@ -256,14 +190,82 @@ def _(mo):
 
 
 @app.cell
-def _(F, loss_fn, nn, pmnist_task_loaders, torch, tqdm, wandb):
-    class BayesianLinear(nn.Module):
-        def __init__(self, in_dim, out_dim):
+def _(
+    F,
+    loss_fn,
+    nn,
+    np,
+    pmnist_task,
+    pmnist_task_loaders,
+    sgvb_mc,
+    torch,
+    trange,
+    wandb,
+):
+    class Net(nn.Module):
+        def __init__(self, in_dim, hidden_dim, out_dim):
             super().__init__()
-            self.mu_w = nn.Parameter(torch.randn(out_dim, in_dim))
-            self.log_sigma_w = nn.Parameter(torch.randn(out_dim, in_dim))
-            self.mu_b = nn.Parameter(torch.randn(out_dim))
-            self.log_sigma_b = nn.Parameter(torch.randn(out_dim))
+            self.linear = nn.Sequential(
+                nn.Linear(in_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, out_dim)
+            )
+
+        def forward(self, x):
+            return self.linear(x)
+
+        def train_epoch(self, loader, loss_fn, opt):
+            self.train()
+            losses, accuracies = [], []
+            for data, target in loader:
+                opt.zero_grad()
+                pred = self(data)
+                loss = loss_fn(pred, target)
+                acc = accuracy(pred, target)
+                loss.backward()
+                opt.step()
+                losses.append(loss.item())
+                accuracies.append(acc.item())
+            return np.mean(losses), np.mean(accuracies)
+
+        def train_run(self, train_loader, test_loader, num_epochs=100):
+            loss_fn = nn.CrossEntropyLoss()
+            opt = torch.optim.AdamW(self.parameters(), lr=1e-3)
+            for i in trange(num_epochs):
+                train_loss, train_acc = self.train_epoch(train_loader, loss_fn, opt)
+                test_loss, test_acc = self.test_run(test_loader, loss_fn)
+                print(f"epoch {i}: train loss {train_loss:.4f} train acc {train_acc:.4f} test loss {test_loss:.4f} test acc {test_acc:.4f}")
+
+        @torch.no_grad()
+        def test_run(self, loader, loss_fn):
+            self.eval()
+            losses, accuracies = [], []
+            for data, target in loader:
+                pred = self(data)
+                loss = loss_fn(pred, target)
+                acc = accuracy(pred, target)
+                losses.append(loss.item())
+                accuracies.append(acc.item())
+            return np.mean(losses), np.mean(accuracies)
+
+    class BayesianLinear(nn.Module):
+        def __init__(self, in_dim, out_dim, init_w=None, init_b=None):
+            super().__init__()
+
+            if init_w is None:
+                # init_w = torch.randn(out_dim, in_dim)
+                init_w = torch.zeros(out_dim, in_dim)
+            if init_b is None:
+                # init_b = torch.randn(out_dim)
+                init_b = torch.zeros(out_dim)
+        
+            init_var = 1e-6
+            self.mu_w = nn.Parameter(init_w)
+            self.log_sigma_w = nn.Parameter(torch.log(init_var * torch.ones(out_dim, in_dim)))
+            self.mu_b = nn.Parameter(init_b)
+            self.log_sigma_b = nn.Parameter(torch.log(init_var * torch.ones(out_dim)))
 
             self.prior_mu_w = torch.zeros_like(self.mu_w)
             self.prior_sigma_w = torch.ones_like(self.log_sigma_w)
@@ -280,20 +282,33 @@ def _(F, loss_fn, nn, pmnist_task_loaders, torch, tqdm, wandb):
                 eps = torch.randn_like(mu_out)
                 return mu_out + sigma_out * eps
 
-    def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
-        return torch.sum(torch.log(sigma_2 / sigma_1) + (sigma_1**2 + (mu_1 - mu_2)**2)/(2*sigma_2**2) - 1/2)
-
     class Ddm(nn.Module):
         def __init__(self, in_dim, hidden_dim, out_dim):
+            baseline_mnist = Net(28*28, 100, 10)
+            baseline_mnist.train_run(*pmnist_task(permute=False), 5)
+
             super().__init__()
             self.bayesian_layers = nn.Sequential(
-                BayesianLinear(in_dim, hidden_dim),
+                BayesianLinear(
+                    in_dim,
+                    hidden_dim,
+                    init_w=baseline_mnist.linear[0].weight,
+                    init_b=baseline_mnist.linear[0].bias
+                ),
                 nn.ReLU(),
-                BayesianLinear(hidden_dim, hidden_dim),
+                BayesianLinear(
+                    hidden_dim,
+                    hidden_dim,
+                    init_w=baseline_mnist.linear[2].weight,
+                    init_b=baseline_mnist.linear[2].bias
+                ),
                 nn.ReLU(),
-                BayesianLinear(hidden_dim, hidden_dim),
-                nn.ReLU(),
-                BayesianLinear(hidden_dim, out_dim)
+                BayesianLinear(
+                    hidden_dim,
+                    out_dim,
+                    init_w=baseline_mnist.linear[4].weight,
+                    init_b=baseline_mnist.linear[4].bias
+                ),
             )
                 
         def update_prior(self):
@@ -304,6 +319,10 @@ def _(F, loss_fn, nn, pmnist_task_loaders, torch, tqdm, wandb):
                     bl.prior_mu_b = bl.mu_b.clone().detach()
                     bl.prior_sigma_b = torch.exp(bl.log_sigma_b.clone().detach())
 
+        @staticmethod
+        def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
+            return torch.sum(torch.log(sigma_2 / sigma_1) + (sigma_1**2 + (mu_1 - mu_2)**2)/(2*sigma_2**2) - 1/2)
+    
         def compute_kl(self):
             res = 0
             for bl in self.bayesian_layers:
@@ -315,33 +334,41 @@ def _(F, loss_fn, nn, pmnist_task_loaders, torch, tqdm, wandb):
                         bl.mu_b, torch.exp(bl.log_sigma_b), bl.prior_mu_b, bl.prior_sigma_b
                     )
             return res
-    
+
+        def train_log(self, task, epoch, loss, acc, log_tensors=False):
+            wandb.log({'task': task, 'epoch': epoch, 'loss': loss, 'acc': acc})
+            if log_tensors:
+                for bli, bl in enumerate(self.bayesian_layers):
+                    if isinstance(bl, BayesianLinear):
+                        wandb.log({
+                            f'{bli}_sigma_w': torch.exp(bl.log_sigma_w).detach(),
+                            f'{bli}_mu_w': bl.mu_w.detach()
+                        })
+
         def forward(self, x):
             return self.bayesian_layers(x)
 
-    # returns the first component of L_SGVB, without the N factor
-    def sgvb_mc(pred, target):
-        # we classification task, so target is a index to the right class
-        # apply softmax:
-        # p(target | pred) = exp(pred_target) / sum_{i=0}^len(pred) exp(pred_i)
-        # according to (3) in the local reparam paper, we apply the log,
-        # and arrive at the l_n from https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss
-        # we use reduction=mean (the default) to get the 1/M factor and the outer sum,
-        # and finally arrive at eq (3) without the N factor
-        return -F.cross_entropy(pred, target)
+        # returns the first component of L_SGVB, without the N factor
+        @staticmethod
+        def sgvb_mc(pred, target):
+            # we classification task, so target is a index to the right class
+            # apply softmax:
+            # p(target | pred) = exp(pred_target) / sum_{i=0}^len(pred) exp(pred_i)
+            # according to (3) in the local reparam paper, we apply the log,
+            # and arrive at the l_n from https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss
+            # we use reduction=mean (the default) to get the 1/M factor and the outer sum,
+            # and finally arrive at eq (3) without the N factor
+            return -F.cross_entropy(pred, target)
 
     def accuracy(pred, target):
         return (pred.argmax(dim=1) == target).sum() / pred.shape[0]
 
-    def train_log(task, epoch, loss, acc):
-        wandb.log({'task': task, 'epoch': epoch, 'loss': loss, 'acc': acc})
-
-    def train(model, tasks, num_epochs=100, log_every=10):
-        opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    def train_run(model, tasks, num_epochs=100, log_every=10):
+        opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
         model.train()
         wandb.watch(model, log_freq=100)
         for task, (train_loader, test_loader) in enumerate(tasks):
-            for epoch in tqdm(range(num_epochs)):   
+            for epoch in trange(num_epochs):   
                 # accuracies, confidences, losses = [], [], []
                 for batch, (data, target) in enumerate(train_loader):
                     opt.zero_grad()
@@ -349,8 +376,7 @@ def _(F, loss_fn, nn, pmnist_task_loaders, torch, tqdm, wandb):
                     loss = -(len(train_loader.dataset) * sgvb_mc(pred, target)) + model.compute_kl()
                     acc = accuracy(pred, target)
                     if batch % log_every == 0:
-                        train_log(task, epoch, loss, acc)
-                        wandb.log({'bl_3_sigma_w': torch.exp(model.bayesian_layers[6].log_sigma_w).detach()})
+                        model.train_log(task, epoch, loss, acc)
                     loss.backward()
                     opt.step()
             model.update_prior()
@@ -362,7 +388,7 @@ def _(F, loss_fn, nn, pmnist_task_loaders, torch, tqdm, wandb):
     # und damit
 
     @torch.no_grad()
-    def infer(model, loader):
+    def test_run(model, loader):
         model.eval()
         for data, target in loader:
             pred = model(data)
@@ -372,27 +398,25 @@ def _(F, loss_fn, nn, pmnist_task_loaders, torch, tqdm, wandb):
         with wandb.init(project='vcl', config=params):
             params = wandb.config
             model = Ddm(28*28, 100, params.classes)
-            train(model, pmnist_task_loaders(), num_epochs=params.epochs)
+            train_run(model, pmnist_task_loaders(), num_epochs=params.epochs)
             # test(model, pmnist_test_loader())
         return model
 
     run_1 = dict(
         classes=10,
-        epochs=100,
+        epochs=10,
         problem='pmnist'
     )
     model_pipeline(run_1)
     return (
         BayesianLinear,
         Ddm,
+        Net,
         accuracy,
-        infer,
-        kl_div_gaussians,
         model_pipeline,
         run_1,
-        sgvb_mc,
-        train,
-        train_log,
+        test_run,
+        train_run,
     )
 
 
