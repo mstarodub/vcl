@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.11.22"
+__generated_with = "0.11.26"
 app = marimo.App(width="full")
 
 
@@ -189,19 +189,8 @@ def _(mo):
     return
 
 
-@app.cell
-def _(
-    F,
-    loss_fn,
-    nn,
-    np,
-    pmnist_task,
-    pmnist_task_loaders,
-    sgvb_mc,
-    torch,
-    trange,
-    wandb,
-):
+app._unparsable_cell(
+    r"""
     class Net(nn.Module):
         def __init__(self, in_dim, hidden_dim, out_dim):
             super().__init__()
@@ -236,7 +225,7 @@ def _(
             for i in trange(num_epochs):
                 train_loss, train_acc = self.train_epoch(train_loader, loss_fn, opt)
                 test_loss, test_acc = self.test_run(test_loader, loss_fn)
-                print(f"epoch {i}: train loss {train_loss:.4f} train acc {train_acc:.4f} test loss {test_loss:.4f} test acc {test_acc:.4f}")
+                print(f\"epoch {i}: train loss {train_loss:.4f} train acc {train_acc:.4f} test loss {test_loss:.4f} test acc {test_acc:.4f}\")
 
         @torch.no_grad()
         def test_run(self, loader, loss_fn):
@@ -260,7 +249,7 @@ def _(
             if init_b is None:
                 # init_b = torch.randn(out_dim)
                 init_b = torch.zeros(out_dim)
-        
+
             init_var = 1e-6
             self.mu_w = nn.Parameter(init_w)
             self.log_sigma_w = nn.Parameter(torch.log(init_var * torch.ones(out_dim, in_dim)))
@@ -310,7 +299,7 @@ def _(
                     init_b=baseline_mnist.linear[4].bias
                 ),
             )
-                
+
         def update_prior(self):
             for bl in self.bayesian_layers:
                 if isinstance(bl, BayesianLinear):
@@ -322,7 +311,7 @@ def _(
         @staticmethod
         def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
             return torch.sum(torch.log(sigma_2 / sigma_1) + (sigma_1**2 + (mu_1 - mu_2)**2)/(2*sigma_2**2) - 1/2)
-    
+
         def compute_kl(self):
             res = 0
             for bl in self.bayesian_layers:
@@ -363,23 +352,58 @@ def _(
     def accuracy(pred, target):
         return (pred.argmax(dim=1) == target).sum() / pred.shape[0]
 
+    def train_epoch_new(model, train_loader, opt, task, epoch):
+        for batch, (data, target) in enumerate(train_loader):
+            opt.zero_grad()
+            pred = model(data)
+            loss = -(len(train_loader.dataset) * sgvb_mc(pred, target)) + model.compute_kl()
+            acc = accuracy(pred, target)
+            if batch % log_every == 0:
+                model.train_log(task, epoch, loss, acc)
+            loss.backward()
+            opt.step()
+
     def train_run(model, tasks, num_epochs=100, log_every=10):
-        opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
+        opt = torch.optim.Adam(model.parameters(), lr=1e-3)
         model.train()
         wandb.watch(model, log_freq=100)
+    
         for task, (train_loader, test_loader) in enumerate(tasks):
-            for epoch in trange(num_epochs):   
-                # accuracies, confidences, losses = [], [], []
-                for batch, (data, target) in enumerate(train_loader):
-                    opt.zero_grad()
-                    pred = model(data)
-                    loss = -(len(train_loader.dataset) * sgvb_mc(pred, target)) + model.compute_kl()
-                    acc = accuracy(pred, target)
-                    if batch % log_every == 0:
-                        model.train_log(task, epoch, loss, acc)
-                    loss.backward()
-                    opt.step()
+
+            #update coreset
+
+            #get C_t
+            def select_coreset(current_task_dataset, coreset_size, old_coreset):
+                pass
+                #return sample(D_t \cup C_{t-1})
+
+            #get D_t \cup C_{t-1} - C_t
+            def select_augmented_complement(D_t, C_{t_1}, C_t):
+                #return D_t \cup C_{t-1} - C_t
+                pass
+
+            coreset_loader = select_coreset(...)
+
+            complement_loader = select_augmented_complement(...)
+
+            # (2)
+            #annahme: Netzwerk prior im Zustand \tilde{q}_{t-1}
+            #egal wie die parameter sind (bis auf locale minima)
+            for epoch in trange(num_epochs):
+                train_epoch_new(model, complement_loader, opt, task, epoch)
+            # ==> Netzwerk parameter im Zustand \tilde{q}_t
+
             model.update_prior()
+            # Netwerk parameter und netwerk prior im Zustand \tilde{q}_t
+        
+            # (3)
+            #annahme: Netzwerk prior im Zustand \tilde{q}_{t}
+            for epoch in trange(num_epochs):
+                train_epoch_new(model, coreset_loader, opt, task, epoch)
+            # ==> Netzwerk parameter im Zustand q_t
+
+            # testen / statistiken
+        
 
     # starting from the left rhs term of (4) in paper and multiplyign by 1/N_t (we could make this precise by using the Expectation over all minibatches):
     # 1/N_t sum^{N_t}_n E(log(p(y_n, x_n)) == grob == 1/M sum^{M}_m E(log(p(y_m, x_m)))
@@ -408,54 +432,9 @@ def _(
         problem='pmnist'
     )
     model_pipeline(run_1)
-    return (
-        BayesianLinear,
-        Ddm,
-        Net,
-        accuracy,
-        model_pipeline,
-        run_1,
-        test_run,
-        train_run,
-    )
-
-
-@app.cell
-def _(accuracy, nn, np, torch, tqdm):
-    def train_epoch(model, loader, loss_fn, opt):
-        model.train()
-        losses, accuracies = [], []
-        for data, target in loader:
-            opt.zero_grad()
-            pred = model(data)
-            loss = loss_fn(pred, target)
-            acc = accuracy(pred, target)
-            loss.backward()
-            opt.step()
-            losses.append(loss.item())
-            accuracies.append(acc.item())
-        return np.mean(losses), np.mean(accuracies)
-
-    def train(model, train_loader, test_loader, num_epochs=100):
-        loss_fn = nn.CrossEntropyLoss()
-        opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
-        for i in tqdm(range(num_epochs)):
-            train_loss, train_acc = train_epoch(model, train_loader, loss_fn, opt)
-            test_loss, test_acc = infer(model, test_loader, loss_fn)
-            print(f"epoch {i}: train loss {train_loss:.4f} train acc {train_acc:.4f} test loss {test_loss:.4f} test acc {test_acc:.4f}")
-
-    @torch.no_grad()
-    def infer(model, loader, loss_fn):
-        model.eval()
-        losses, accuracies = [], []
-        for data, target in loader:
-            pred = model(data)
-            loss = loss_fn(pred, target)
-            acc = accuracy(pred, target)
-            losses.append(loss.item())
-            accuracies.append(acc.item())
-        return np.mean(losses), np.mean(accuracies)
-    return infer, train, train_epoch
+    """,
+    name="_"
+)
 
 
 @app.cell
