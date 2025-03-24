@@ -78,13 +78,20 @@ def _(datasets, plt, torch, transforms):
             tf = transform_permute(perms[task])
             data_train = datasets.MNIST('./data', train=True, download=True, transform=tf, target_transform=torch.tensor)
             data_test = datasets.MNIST('./data', train=False, download=True, transform=tf, target_transform=torch.tensor)
-            train_loader = torch.utils.data.DataLoader(data_train, batch_size=batch_size, shuffle=True, pin_memory=True)
+            train_loader = torch.utils.data.DataLoader(
+                data_train, 
+                batch_size=batch_size, 
+                shuffle=True, 
+                pin_memory=True,
+                generator=torch.Generator(device=torch.get_default_device())
+            )
             cumulative_test_datasets.append(data_test)
             test_loader = torch.utils.data.DataLoader(
                 torch.utils.data.ConcatDataset(cumulative_test_datasets),
                 batch_size=batch_size,
                 shuffle=True,
-                pin_memory=True
+                pin_memory=True,
+                generator=torch.Generator(device=torch.get_default_device())
             )
             loaders.append((train_loader, test_loader))
         return loaders
@@ -141,14 +148,16 @@ def _(datasets, torch, transform):
                 torch.utils.data.Subset(train_ds, train_idx),
                 batch_size=batch_size,
                 shuffle=True,
-                pin_memory=True
+                pin_memory=True,
+                generator=torch.Generator(device=torch.get_default_device())
             )
             cumulative_test_datasets.append(torch.utils.data.Subset(test_ds, test_idx))
             test_loader = torch.utils.data.DataLoader(
                 torch.utils.data.ConcatDataset(cumulative_test_datasets),
                 batch_size=batch_size,
                 shuffle=True,
-                pin_memory=True
+                pin_memory=True,
+                generator=torch.Generator(device=torch.get_default_device())
             )
             loaders.append((train_loader, test_loader))
         return loaders
