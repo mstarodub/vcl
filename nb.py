@@ -106,15 +106,15 @@ def _(datasets, plt, torch, transforms):
 
 
 @app.cell
-def _(pmnist_task_loaders, torch, visualize_sample_img):
+def _():
     # pmnist
 
     # show the permutation
-    visualize_sample_img(pmnist_task_loaders()[0][0])
+    # visualize_sample_img(pmnist_task_loaders()[0][0])
     # should be 10 classes
-    example_loader, _ = pmnist_task_loaders()[0]
-    print("unique classes:", torch.unique(example_loader.dataset.targets).tolist())
-    return (example_loader,)
+    # example_loader, _ = pmnist_task_loaders()[0]
+    # print("unique classes:", torch.unique(example_loader.dataset.targets).tolist())
+    return
 
 
 @app.cell
@@ -156,17 +156,17 @@ def _(datasets, torch, transform):
 
 
 @app.cell
-def _(splitmnist_task_loaders):
+def _():
     # split mnist
 
     # balanced number of classes per task
-    from collections import defaultdict
-    example_loaders = splitmnist_task_loaders()
-    counts = defaultdict(int)
-    for _, y in example_loaders[0][0].dataset:
-        counts[tuple(y.tolist())] += 1
-    print(counts)
-    return counts, defaultdict, example_loaders, y
+    # from collections import defaultdict
+    # example_loaders = splitmnist_task_loaders()
+    # counts = defaultdict(int)
+    # for _, y in example_loaders[0][0].dataset:
+    #     counts[tuple(y.tolist())] += 1
+    # print(counts)
+    return
 
 
 @app.cell
