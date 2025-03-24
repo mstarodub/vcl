@@ -422,8 +422,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
 
     run_1 = dict(
         classes=10,
-        epochs=10,
-        coreset_size=0,
+        epochs=100,
+        coreset_size=2500,
         problem='pmnist'
     )
     model_pipeline(run_1)
@@ -579,8 +579,8 @@ def _(accuracy, nn, np, pmnist_task_loaders, torch, trange):
         'problem': 'pmnist'
     }
 
-    model = si_model_pipeline(run_params)
-    return SINet, model, run_params, si_model_pipeline
+    # model = si_model_pipeline(run_params)
+    return SINet, run_params, si_model_pipeline
 
 
 @app.cell
