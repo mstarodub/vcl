@@ -189,6 +189,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             self.train()
             losses, accuracies = [], []
             for data, target in loader:
+                data, target = data.to(torch.get_default_device()), target.to(torch.get_default_device())
                 opt.zero_grad()
                 pred = self(data)
                 loss = loss_fn(pred, target)
@@ -212,6 +213,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             self.eval()
             losses, accuracies = [], []
             for data, target in loader:
+                data, target = data.to(torch.get_default_device()), target.to(torch.get_default_device())
                 pred = self(data)
                 loss = loss_fn(pred, target)
                 acc = accuracy(pred, target)
@@ -334,6 +336,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
 
         def train_epoch(self, loader, opt, task, epoch):
             for batch, (data, target) in enumerate(loader):
+                data, target = data.to(torch.get_default_device()), target.to(torch.get_default_device())
                 opt.zero_grad()
                 pred = self(data)
                 loss = -(len(loader.dataset) * self.sgvb_mc(pred, target)) + self.compute_kl()
@@ -408,6 +411,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             self.eval()
             accuracies = []
             for batch, (data, target) in enumerate(loader):
+                data, target = data.to(torch.get_default_device()), target.to(torch.get_default_device())
                 pred = self(data)
                 acc = accuracy(pred, target)
                 accuracies.append(acc.item())
