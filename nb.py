@@ -33,7 +33,7 @@ def _():
 
 @app.cell
 def _(np, torch):
-    def torch_select_backend(enable_mps=False, enable_cuda=False):
+    def torch_select_backend(enable_mps=False, enable_cuda=True):
         if torch.backends.mps.is_available() and enable_mps:
             device = torch.device('mps')
         elif torch.cuda.is_available() and enable_cuda:
