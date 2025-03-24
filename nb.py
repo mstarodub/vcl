@@ -78,12 +78,13 @@ def _(datasets, plt, torch, transforms):
             tf = transform_permute(perms[task])
             data_train = datasets.MNIST('./data', train=True, download=True, transform=tf, target_transform=torch.tensor)
             data_test = datasets.MNIST('./data', train=False, download=True, transform=tf, target_transform=torch.tensor)
-            train_loader = torch.utils.data.DataLoader(data_train, batch_size=batch_size, shuffle=True)
+            train_loader = torch.utils.data.DataLoader(data_train, batch_size=batch_size, shuffle=True, pin_memory=True)
             cumulative_test_datasets.append(data_test)
             test_loader = torch.utils.data.DataLoader(
                 torch.utils.data.ConcatDataset(cumulative_test_datasets),
                 batch_size=batch_size,
-                shuffle=True
+                shuffle=True,
+                pin_memory=True
             )
             loaders.append((train_loader, test_loader))
         return loaders
@@ -139,13 +140,15 @@ def _(datasets, torch, transform):
             train_loader = torch.utils.data.DataLoader(
                 torch.utils.data.Subset(train_ds, train_idx),
                 batch_size=batch_size,
-                shuffle=True
+                shuffle=True,
+                pin_memory=True
             )
             cumulative_test_datasets.append(torch.utils.data.Subset(test_ds, test_idx))
             test_loader = torch.utils.data.DataLoader(
                 torch.utils.data.ConcatDataset(cumulative_test_datasets),
                 batch_size=batch_size,
-                shuffle=True
+                shuffle=True,
+                pin_memory=True
             )
             loaders.append((train_loader, test_loader))
         return loaders
@@ -355,7 +358,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 torch.stack([p[0] for p in coreset]) if coreset else torch.empty(0),
                 torch.stack([p[1] for p in coreset]) if coreset else torch.empty(0)
             )
-            return torch.utils.data.DataLoader(coreset_dataset, batch_size=64)
+            return torch.utils.data.DataLoader(coreset_dataset, batch_size=64, pin_memory=True)
 
         # returns (D_t \cup C_{t-1}) - C_t = (D_t - C_t) \cup (C_{t-1} - C_t)
         @staticmethod
@@ -371,7 +374,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             return torch.utils.data.DataLoader(torch.utils.data.ConcatDataset([
                 data_complement_dataset,
                 coreset_complement_dataset
-            ]), batch_size=256)
+            ]), batch_size=256, pin_memory=True)
     
         def train_run(self, tasks, num_epochs=100):
             opt = torch.optim.Adam(self.parameters(), lr=1e-3)
