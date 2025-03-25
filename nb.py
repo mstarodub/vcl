@@ -175,6 +175,9 @@ def _():
 
 @app.cell
 def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
+    # TODO: coreset strategy is 200 new points per task x 10 for the coreset 200
+    # TODO: per test-task accuracy breakdown
+
     class Net(nn.Module):
         def __init__(self, in_dim, hidden_dim, out_dim):
             super().__init__()
@@ -234,7 +237,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 init_w = torch.randn(out_dim, in_dim)
             if init_b is None:
                 init_b = torch.randn(out_dim)
-        
+
+            # TODO: 1e-3 ??? LOGARITHMUS -> -3
             init_var = 1e-6
             self.mu_w = nn.Parameter(init_w)
             self.log_sigma_w = nn.Parameter(torch.log(init_var * torch.ones(out_dim, in_dim)))
@@ -249,12 +253,13 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
         def forward(self, x):
             mu_out = F.linear(x, self.mu_w, self.mu_b)
             sigma_out = torch.sqrt(F.linear(x**2, torch.exp(2 * self.log_sigma_w), torch.exp(2 * self.log_sigma_b)))
+            # standard normal
             eps = torch.randn_like(mu_out)
             return mu_out + sigma_out * eps
 
     class Ddm(nn.Module):
         def __init__(
-            self, 
+            self,
             in_dim, 
             hidden_dim, 
             out_dim, 
@@ -341,7 +346,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 data, target = data.to(device), target.to(device)
                 opt.zero_grad()
                 pred = self(data)
-                loss = -(len(loader.dataset) * self.sgvb_mc(pred, target)) + self.compute_kl()
+                # TODO: divide by instead of multiplying by N?
+                loss = -self.sgvb_mc(pred, target) + self.compute_kl() / len(loader.dataset)
                 acc = accuracy(pred, target)
                 if batch % self.logging_every == 0:
                     wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
@@ -349,7 +355,6 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 opt.step()
 
         # sample(D_t \cup C_{t-1})
-        # TODO: the coreset_k_newtask strategy leads to small coreset sizes in the beginning
         def select_coreset(self, current_task_dataset, old_coreset):
             n_new_points = min(self.coreset_k_newtask, self.coreset_size)
             idx_new = torch.randperm(len(current_task_dataset))[:n_new_points]
@@ -364,7 +369,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 torch.stack([p[0] for p in coreset]) if coreset else torch.empty(0),
                 torch.stack([p[1] for p in coreset]) if coreset else torch.empty(0)
             )
-            return torch.utils.data.DataLoader(coreset_dataset, batch_size=64, shuffle=True)
+            return torch.utils.data.DataLoader(coreset_dataset, batch_size=64, shuffle=True if coreset else False)
 
         # returns (D_t \cup C_{t-1}) - C_t = (D_t - C_t) \cup (C_{t-1} - C_t)
         @staticmethod
@@ -402,6 +407,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 # network parameters and network prior are \tilde{q}_t
         
                 # (3)
+                # TODO: ONLY USED FOR PREDICITION NOT PROPAGATION
                 # precondition: network prior is \tilde{q}_{t}
                 for epoch in trange(num_epochs, desc=f'task {task} phase 2'):
                     self.train_epoch(coreset_loader, opt, task, epoch)
