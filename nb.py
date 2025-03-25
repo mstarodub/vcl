@@ -20,8 +20,7 @@ def _():
     import torchvision.transforms.v2 as transforms
     from tqdm.auto import tqdm, trange
     import matplotlib.pyplot as plt
-    from dataclasses import dataclass
-    return F, dataclass, datasets, nn, np, plt, torch, tqdm, trange, transforms
+    return F, datasets, nn, np, plt, torch, tqdm, trange, transforms
 
 
 @app.cell
@@ -191,10 +190,11 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             return self.linear(x)
 
         def train_epoch(self, loader, loss_fn, opt):
+            device = torch.get_default_device()
             self.train()
             losses, accuracies = [], []
             for data, target in loader:
-                data, target = data.to(torch.get_default_device()), target.to(torch.get_default_device())
+                data, target = data.to(device), target.to(device)
                 opt.zero_grad()
                 pred = self(data)
                 loss = loss_fn(pred, target)
@@ -215,10 +215,11 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
 
         @torch.no_grad()
         def test_run(self, loader, loss_fn):
+            device = torch.get_default_device()
             self.eval()
             losses, accuracies = [], []
             for data, target in loader:
-                data, target = data.to(torch.get_default_device()), target.to(torch.get_default_device())
+                data, target = data.to(device), target.to(device)
                 pred = self(data)
                 loss = loss_fn(pred, target)
                 acc = accuracy(pred, target)
@@ -229,12 +230,11 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
     class BayesianLinear(nn.Module):
         def __init__(self, in_dim, out_dim, init_w=None, init_b=None):
             super().__init__()
-
             if init_w is None:
                 init_w = torch.randn(out_dim, in_dim)
             if init_b is None:
                 init_b = torch.randn(out_dim)
-
+        
             init_var = 1e-6
             self.mu_w = nn.Parameter(init_w)
             self.log_sigma_w = nn.Parameter(torch.log(init_var * torch.ones(out_dim, in_dim)))
@@ -246,28 +246,34 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             self.prior_mu_b = torch.zeros_like(self.mu_b)
             self.prior_sigma_b = torch.ones_like(self.log_sigma_b)
 
-        # TODO: need a way to pass deterministic from the model (nn.Sequential)
-        def forward(self, x, deterministic=False):
+        def forward(self, x):
             mu_out = F.linear(x, self.mu_w, self.mu_b)
-            if deterministic:
-                return mu_out
-            else:
-                sigma_out = torch.sqrt(F.linear(x**2, torch.exp(2 * self.log_sigma_w), torch.exp(2 * self.log_sigma_b)))
-                eps = torch.randn_like(mu_out)
-                return mu_out + sigma_out * eps
+            sigma_out = torch.sqrt(F.linear(x**2, torch.exp(2 * self.log_sigma_w), torch.exp(2 * self.log_sigma_b)))
+            eps = torch.randn_like(mu_out)
+            return mu_out + sigma_out * eps
 
     class Ddm(nn.Module):
-        # TODO: make sure it works the same as the algorithm without coreset when
-        #   coreset_size = 0, and also works when coreset_k_newtask > coreset_size
-        def __init__(self, in_dim, hidden_dim, out_dim, coreset_size=0, coreset_k_newtask=200, logging_every=10):
+        def __init__(
+            self, 
+            in_dim, 
+            hidden_dim, 
+            out_dim, 
+            bayesian_samples=1,
+            coreset_size=0, 
+            pretrain_epochs=5, 
+            coreset_k_newtask=200,
+            logging_every=10
+        ):
+        
             baseline_mnist = Net(in_dim, hidden_dim, out_dim)
-            baseline_mnist.train_run(*pmnist_task_loaders()[0], 5)
+            baseline_mnist.train_run(*pmnist_task_loaders()[0], pretrain_epochs)
 
             super().__init__()
             self.logging_every = logging_every
+            self.bayesian_samples = bayesian_samples
             self.coreset_size = coreset_size
             self.coreset_k_newtask = coreset_k_newtask
-            self.bayesian_layers = nn.Sequential(
+            self.layers = nn.Sequential(
                 BayesianLinear(
                     in_dim,
                     hidden_dim,
@@ -291,7 +297,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             )
 
         def update_prior(self):
-            for bl in self.bayesian_layers:
+            for bl in self.layers:
                 if isinstance(bl, BayesianLinear):
                     bl.prior_mu_w = bl.mu_w.clone().detach()
                     bl.prior_sigma_w = torch.exp(bl.log_sigma_w.clone().detach())
@@ -304,7 +310,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
 
         def compute_kl(self):
             res = 0
-            for bl in self.bayesian_layers:
+            for bl in self.layers:
                 if isinstance(bl, BayesianLinear):
                     res += self.kl_div_gaussians(
                         bl.mu_w, torch.exp(bl.log_sigma_w), bl.prior_mu_w, bl.prior_sigma_w
@@ -314,18 +320,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                     )
             return res
 
-        def train_log(self, task, epoch, loss, acc, log_tensors=False):
-            wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
-            if log_tensors:
-                for bli, bl in enumerate(self.bayesian_layers):
-                    if isinstance(bl, BayesianLinear):
-                        wandb.log({
-                            f'{bli}_sigma_w': torch.exp(bl.log_sigma_w).detach(),
-                            f'{bli}_mu_w': bl.mu_w.detach()
-                        })
-
         def forward(self, x):
-            return self.bayesian_layers(x)
+            return self.layers(x)
 
         # returns the first component of L_SGVB, without the N factor
         @staticmethod
@@ -340,18 +336,20 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             return -F.cross_entropy(pred, target)
 
         def train_epoch(self, loader, opt, task, epoch):
+            device = torch.get_default_device()
             for batch, (data, target) in enumerate(loader):
-                data, target = data.to(torch.get_default_device()), target.to(torch.get_default_device())
+                data, target = data.to(device), target.to(device)
                 opt.zero_grad()
                 pred = self(data)
                 loss = -(len(loader.dataset) * self.sgvb_mc(pred, target)) + self.compute_kl()
                 acc = accuracy(pred, target)
                 if batch % self.logging_every == 0:
-                    self.train_log(task, epoch, loss, acc)
+                    wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
                 loss.backward()
                 opt.step()
 
         # sample(D_t \cup C_{t-1})
+        # TODO: the coreset_k_newtask strategy leads to small coreset sizes in the beginning
         def select_coreset(self, current_task_dataset, old_coreset):
             n_new_points = min(self.coreset_k_newtask, self.coreset_size)
             idx_new = torch.randperm(len(current_task_dataset))[:n_new_points]
@@ -366,7 +364,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 torch.stack([p[0] for p in coreset]) if coreset else torch.empty(0),
                 torch.stack([p[1] for p in coreset]) if coreset else torch.empty(0)
             )
-            return torch.utils.data.DataLoader(coreset_dataset, batch_size=64)
+            return torch.utils.data.DataLoader(coreset_dataset, batch_size=64, shuffle=True)
 
         # returns (D_t \cup C_{t-1}) - C_t = (D_t - C_t) \cup (C_{t-1} - C_t)
         @staticmethod
@@ -382,7 +380,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             return torch.utils.data.DataLoader(torch.utils.data.ConcatDataset([
                 data_complement_dataset,
                 coreset_complement_dataset
-            ]), batch_size=256)
+            ]), batch_size=256, shuffle=True)
     
         def train_run(self, tasks, num_epochs=100):
             opt = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -413,12 +411,17 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
 
         @torch.no_grad()
         def test_run(self, loader, task):
+            device = torch.get_default_device()
             self.eval()
             accuracies = []
             for batch, (data, target) in enumerate(loader):
-                data, target = data.to(torch.get_default_device()), target.to(torch.get_default_device())
-                pred = self(data)
-                acc = accuracy(pred, target)
+                data, target = data.to(device), target.to(device)
+                predicts = []
+                for _ in range(self.bayesian_samples):
+                    pred = self(data)
+                    predicts.append(pred)
+                mean_pred = torch.stack(predicts).mean(0)
+                acc = accuracy(mean_pred, target)
                 accuracies.append(acc.item())
             wandb.log({'task': task, 'test_acc': np.mean(accuracies)})
 
@@ -428,18 +431,33 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
     def model_pipeline(params):
         with wandb.init(project='vcl', config=params):
             params = wandb.config
-            model = Ddm(28*28, 100, params.classes, coreset_size=params.coreset_size)
+            model = Ddm(28*28, 100, params.classes,
+                        bayesian_samples=params.bayesian_samples, 
+                        coreset_size=params.coreset_size,
+                        pretrain_epochs=params.pretrain_epochs
+            )
             model.train_run(pmnist_task_loaders(), num_epochs=params.epochs)
         return model
 
-    run_1 = dict(
+    ddm_pmnist_run = dict(
         classes=10,
         epochs=100,
-        coreset_size=2500,
-        problem='pmnist'
+        pretrain_epochs=10,
+        coreset_size=0,
+        bayesian_samples=100,
+        problem='pmnist',
+        model='vcl'
     )
-    model_pipeline(run_1)
-    return BayesianLinear, Ddm, Net, accuracy, model_pipeline, run_1
+    model = model_pipeline(ddm_pmnist_run)
+    return (
+        BayesianLinear,
+        Ddm,
+        Net,
+        accuracy,
+        ddm_pmnist_run,
+        model,
+        model_pipeline,
+    )
 
 
 @app.cell
