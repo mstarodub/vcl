@@ -175,7 +175,6 @@ def _():
 
 @app.cell
 def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
-    # TODO: coreset strategy is 200 new points per task x 10 for the coreset 200
     # TODO: per test-task accuracy breakdown
 
     class Net(nn.Module):
@@ -264,9 +263,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             hidden_dim, 
             out_dim, 
             bayesian_samples=1,
-            coreset_size=0, 
-            pretrain_epochs=5, 
-            coreset_k_newtask=200,
+            coreset_k=0, 
+            pretrain_epochs=5,
             logging_every=10
         ):
         
@@ -276,8 +274,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             super().__init__()
             self.logging_every = logging_every
             self.bayesian_samples = bayesian_samples
-            self.coreset_size = coreset_size
-            self.coreset_k_newtask = coreset_k_newtask
+            self.coreset_k = coreset_k
             self.layers = nn.Sequential(
                 BayesianLinear(
                     in_dim,
@@ -346,7 +343,6 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 data, target = data.to(device), target.to(device)
                 opt.zero_grad()
                 pred = self(data)
-                # TODO: divide by instead of multiplying by N?
                 loss = -self.sgvb_mc(pred, target) + self.compute_kl() / len(loader.dataset)
                 acc = accuracy(pred, target)
                 if batch % self.logging_every == 0:
@@ -354,16 +350,10 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 loss.backward()
                 opt.step()
 
-        # sample(D_t \cup C_{t-1})
+        # sample(D_t) \cup C_{t-1}
         def select_coreset(self, current_task_dataset, old_coreset):
-            n_new_points = min(self.coreset_k_newtask, self.coreset_size)
-            idx_new = torch.randperm(len(current_task_dataset))[:n_new_points]
-            coreset = [current_task_dataset[i] for i in idx_new]
-
-            if (remaining := self.coreset_size - n_new_points) and old_coreset:
-                n_old_points = min(remaining, len(old_coreset))
-                idx_old = torch.randperm(len(old_coreset))[:n_old_points]
-                coreset += [old_coreset[i] for i in idx_old]
+            idx_new = torch.randperm(len(current_task_dataset))[:self.coreset_k]
+            coreset = [current_task_dataset[i] for i in idx_new] + old_coreset
 
             coreset_dataset = torch.utils.data.TensorDataset(
                 torch.stack([p[0] for p in coreset]) if coreset else torch.empty(0),
@@ -439,7 +429,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             params = wandb.config
             model = Ddm(28*28, 100, params.classes,
                         bayesian_samples=params.bayesian_samples, 
-                        coreset_size=params.coreset_size,
+                        coreset_k=params.coreset_k,
                         pretrain_epochs=params.pretrain_epochs
             )
             model.train_run(pmnist_task_loaders(), num_epochs=params.epochs)
@@ -449,7 +439,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
         classes=10,
         epochs=100,
         pretrain_epochs=10,
-        coreset_size=0,
+        coreset_k=0,
         bayesian_samples=100,
         problem='pmnist',
         model='vcl'
