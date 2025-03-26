@@ -380,10 +380,10 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
     
         def train_test_run(self, tasks, num_epochs=100):
             self.train()
+            opt = torch.optim.Adam(self.parameters(), lr=1e-3)
             wandb.watch(self, log_freq=100)
             old_coreset = []
             for task, (train_loader, test_loader) in enumerate(tasks):
-                opt = torch.optim.Adam(self.parameters(), lr=1e-3)
                 coreset_loader = self.select_coreset(train_loader.dataset, old_coreset)
                 complement_loader = self.select_augmented_complement(train_loader.dataset, old_coreset, list(coreset_loader.dataset))
             
@@ -408,8 +408,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
 
         @torch.no_grad()
         def test_run(self, loader, task):
-            device = torch.get_default_device()
             self.eval()
+            device = torch.get_default_device()
             accuracies = []
             for batch, (data, target) in enumerate(loader):
                 data, target = data.to(device), target.to(device)
