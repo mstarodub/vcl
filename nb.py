@@ -238,12 +238,11 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             if init_b is None:
                 init_b = torch.randn(out_dim)
 
-            # TODO: 1e-3 ??? LOGARITHMUS -> -3
-            init_var = 1e-6
+            init_std = 1e-3
             self.mu_w = nn.Parameter(init_w)
-            self.log_sigma_w = nn.Parameter(torch.log(init_var * torch.ones(out_dim, in_dim)))
+            self.log_sigma_w = nn.Parameter(torch.log(init_std * torch.ones(out_dim, in_dim)))
             self.mu_b = nn.Parameter(init_b)
-            self.log_sigma_b = nn.Parameter(torch.log(init_var * torch.ones(out_dim)))
+            self.log_sigma_b = nn.Parameter(torch.log(init_std * torch.ones(out_dim)))
 
             self.prior_mu_w = torch.zeros_like(self.mu_w)
             self.prior_sigma_w = torch.ones_like(self.log_sigma_w)
