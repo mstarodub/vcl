@@ -32,24 +32,23 @@ def _():
 
 @app.cell
 def _(np, torch):
-    def torch_select_backend(enable_mps=False, enable_cuda=True):
+    def torch_device(enable_mps=False, enable_cuda=True):
         if torch.backends.mps.is_available() and enable_mps:
             device = torch.device('mps')
         elif torch.cuda.is_available() and enable_cuda:
             device = torch.device('cuda')
         else:
             device = torch.device('cpu')
-        torch.set_default_device(device)
-        print("torch version", torch.__version__, "running on", torch.ones(1).device)
+        return device
 
     # reproducibility
     def seed(seed=0):
         np.random.seed(seed)
         torch.manual_seed(seed)
 
-    torch_select_backend()
+    print("torch version", torch.__version__, "running on", torch.ones(1, device=torch_device()).device)
     seed(0)
-    return seed, torch_select_backend
+    return seed, torch_device
 
 
 @app.cell
@@ -59,12 +58,16 @@ def _(datasets, plt, torch, transforms):
             transforms.ToImage(),
             transforms.ToDtype(torch.float32, scale=True),
             transforms.Normalize((0.1307,), (0.3081,)),
-            transforms.Lambda(lambda x: torch.flatten(x))
+            transforms.Lambda(torch.flatten)
         ])
 
     def transform_permute(idx):
         return transforms.Compose([
             transform(),
+            # nasty pytorch bug: if we try to use num_workers > 0
+            # on macos, pickling this fails, and nothing seems to help
+            # things I tried: using dill instead of pickle for the 
+            # multiprocessing.reduction.ForkingPickler, partial, a class
             transforms.Lambda(lambda x: x[idx])
         ])
 
@@ -80,15 +83,15 @@ def _(datasets, plt, torch, transforms):
             train_loader = torch.utils.data.DataLoader(
                 data_train, 
                 batch_size=batch_size, 
-                shuffle=True, 
-                generator=torch.Generator(device=torch.get_default_device())
+                shuffle=True,
+                num_workers=12 if torch.cuda.is_available() else 0
             )
             cumulative_test_datasets.append(data_test)
             test_loader = torch.utils.data.DataLoader(
                 torch.utils.data.ConcatDataset(cumulative_test_datasets),
                 batch_size=batch_size,
                 shuffle=True,
-                generator=torch.Generator(device=torch.get_default_device())
+                num_workers=12 if torch.cuda.is_available() else 0
             )
             loaders.append((train_loader, test_loader))
         return loaders
@@ -145,14 +148,14 @@ def _(datasets, torch, transform):
                 torch.utils.data.Subset(train_ds, train_idx),
                 batch_size=batch_size,
                 shuffle=True,
-                generator=torch.Generator(device=torch.get_default_device())
+                num_workers=12 if torch.cuda.is_available() else 0
             )
             cumulative_test_datasets.append(torch.utils.data.Subset(test_ds, test_idx))
             test_loader = torch.utils.data.DataLoader(
                 torch.utils.data.ConcatDataset(cumulative_test_datasets),
                 batch_size=batch_size,
                 shuffle=True,
-                generator=torch.Generator(device=torch.get_default_device())
+                num_workers=12 if torch.cuda.is_available() else 0
             )
             loaders.append((train_loader, test_loader))
         return loaders
@@ -174,7 +177,7 @@ def _():
 
 
 @app.cell
-def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
+def _(F, nn, np, pmnist_task_loaders, torch, torch_device, trange, wandb):
     # TODO: per test-task accuracy breakdown
     # TODO: use He ReLu layer init if pretrain=0
 
@@ -193,7 +196,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             return self.linear(x)
 
         def train_epoch(self, loader, loss_fn, opt):
-            device = torch.get_default_device()
+            device = torch_device()
             self.train()
             losses, accuracies = [], []
             for data, target in loader:
@@ -218,7 +221,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
 
         @torch.no_grad()
         def test_run(self, loader, loss_fn):
-            device = torch.get_default_device()
+            device = torch_device()
             self.eval()
             losses, accuracies = [], []
             for data, target in loader:
@@ -243,10 +246,10 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             self.mu_b = nn.Parameter(init_b)
             self.log_sigma_b = nn.Parameter(torch.log(init_std * torch.ones(out_dim)))
 
-            self.prior_mu_w = torch.zeros_like(self.mu_w)
-            self.prior_sigma_w = torch.ones_like(self.log_sigma_w)
-            self.prior_mu_b = torch.zeros_like(self.mu_b)
-            self.prior_sigma_b = torch.ones_like(self.log_sigma_b)
+            self.prior_mu_w = torch.zeros_like(self.mu_w, device=torch_device())
+            self.prior_sigma_w = torch.ones_like(self.log_sigma_w, device=torch_device())
+            self.prior_mu_b = torch.zeros_like(self.mu_b, device=torch_device())
+            self.prior_sigma_b = torch.ones_like(self.log_sigma_b, device=torch_device())
 
         def forward(self, x):
             mu_out = F.linear(x, self.mu_w, self.mu_b)
@@ -268,8 +271,9 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             pretrain_epochs=5,
             logging_every=10
         ):
-        
-            baseline_mnist = Net(in_dim, hidden_dim, out_dim)
+
+            baseline_mnist = Net(in_dim, hidden_dim, out_dim).to(torch_device())
+            baseline_mnist = torch.compile(baseline_mnist)
             baseline_mnist.train_run(*pmnist_task_loaders()[0], pretrain_epochs)
 
             super().__init__()
@@ -351,7 +355,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             return -F.cross_entropy(pred, target)
 
         def train_epoch(self, loader, opt, task, epoch):
-            device = torch.get_default_device()
+            device = torch_device()
             for batch, (data, target) in enumerate(loader):
                 data, target = data.to(device), target.to(device)
                 opt.zero_grad()
@@ -372,7 +376,12 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 torch.stack([p[0] for p in coreset]) if coreset else torch.empty(0),
                 torch.stack([p[1] for p in coreset]) if coreset else torch.empty(0)
             )
-            return torch.utils.data.DataLoader(coreset_dataset, batch_size=64, shuffle=True if coreset else False)
+            return torch.utils.data.DataLoader(
+                coreset_dataset, 
+                batch_size=64, 
+                shuffle=True if coreset else False,
+                num_workers=12 if torch.cuda.is_available() else 0
+            )
 
         # returns (D_t \cup C_{t-1}) - C_t = (D_t - C_t) \cup (C_{t-1} - C_t)
         @staticmethod
@@ -388,8 +397,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             return torch.utils.data.DataLoader(torch.utils.data.ConcatDataset([
                 data_complement_dataset,
                 coreset_complement_dataset
-            ]), batch_size=256, shuffle=True)
-    
+            ]), batch_size=256, shuffle=True, num_workers=12 if torch.cuda.is_available() else 0)
+
         def train_test_run(self, tasks, num_epochs=100):
             self.train()
             opt = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -405,30 +414,30 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 # restore network parameters to \tilde{q}_{t}
                 if task > 0:
                     self.restore_from_prior()
-            
+
                 # (2)
                 # precondition: network prior is \tilde{q}_{t-1}
                 # network parameters are whatever
                 for epoch in trange(num_epochs, desc=f'task {task+1} phase 1'):
                     self.train_epoch(complement_loader, opt, task, epoch)
                 # ==> network parameters are \tilde{q}_t
-    
+
                 self.update_prior()
                 # network parameters and network prior are \tilde{q}_t
-        
+
                 # (3)
                 # TODO: ONLY USED FOR PREDICITION NOT PROPAGATION
                 # precondition: network prior is \tilde{q}_{t}
                 for epoch in trange(num_epochs, desc=f'task {task+1} phase 2'):
                     self.train_epoch(coreset_loader, opt, task, epoch)
                 # ==> network parameters are q_t
-    
+
                 self.test_run(test_loader, task)
 
         @torch.no_grad()
         def test_run(self, loader, task):
             self.eval()
-            device = torch.get_default_device()
+            device = torch_device()
             accuracies = []
             for batch, (data, target) in enumerate(loader):
                 data, target = data.to(device), target.to(device)
@@ -453,17 +462,18 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                         bayesian_samples=params.bayesian_samples, 
                         coreset_k=params.coreset_k,
                         pretrain_epochs=params.pretrain_epochs
-            )
+            ).to(torch_device())
+            model = torch.compile(model)
             model.train_test_run(pmnist_task_loaders(), num_epochs=params.epochs)
         return model
 
     ddm_pmnist_run = dict(
         classes=10,
         epochs=100,
-        pretrain_epochs=10,
+        pretrain_epochs=1,
         coreset_k=0,
         per_task_opt=False,
-        layer_init_std=1e-6,
+        layer_init_std=1e-3,
         bayesian_samples=100,
         problem='pmnist',
         model='vcl'
