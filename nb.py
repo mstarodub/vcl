@@ -306,6 +306,14 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                     bl.prior_mu_b = bl.mu_b.clone().detach()
                     bl.prior_sigma_b = torch.exp(bl.log_sigma_b.clone().detach())
 
+        def restore_from_prior(self):
+            for bl in self.layers:
+                if isinstance(bl, BayesianLinear):
+                    bl.mu_w.data = bl.prior_mu_w.clone().detach()
+                    bl.log_sigma_w.data = torch.log(bl.prior_sigma_w.clone().detach())
+                    bl.mu_b.data = bl.prior_mu_b.clone().detach()
+                    bl.log_sigma_b.data = torch.log(bl.prior_sigma_b.clone().detach())
+
         @staticmethod
         def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
             return torch.sum(torch.log(sigma_2 / sigma_1) + (sigma_1**2 + (mu_1 - mu_2)**2)/(2*sigma_2**2) - 1/2)
@@ -385,6 +393,10 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             for task, (train_loader, test_loader) in enumerate(tasks):
                 coreset_loader = self.select_coreset(train_loader.dataset, old_coreset)
                 complement_loader = self.select_augmented_complement(train_loader.dataset, old_coreset, list(coreset_loader.dataset))
+
+                # restore network parameters to \tilde{q}_{t}
+                if task > 0:
+                    self.restore_from_prior()
             
                 # (2)
                 # precondition: network prior is \tilde{q}_{t-1}
