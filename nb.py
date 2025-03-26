@@ -176,6 +176,7 @@ def _():
 @app.cell
 def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
     # TODO: per test-task accuracy breakdown
+    # TODO: use He ReLu layer init if pretrain=0
 
     class Net(nn.Module):
         def __init__(self, in_dim, hidden_dim, out_dim):
@@ -377,19 +378,19 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 coreset_complement_dataset
             ]), batch_size=256, shuffle=True)
     
-        def train_run(self, tasks, num_epochs=100):
-            opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+        def train_test_run(self, tasks, num_epochs=100):
             self.train()
             wandb.watch(self, log_freq=100)
             old_coreset = []
             for task, (train_loader, test_loader) in enumerate(tasks):
+                opt = torch.optim.Adam(self.parameters(), lr=1e-3)
                 coreset_loader = self.select_coreset(train_loader.dataset, old_coreset)
                 complement_loader = self.select_augmented_complement(train_loader.dataset, old_coreset, list(coreset_loader.dataset))
             
                 # (2)
                 # precondition: network prior is \tilde{q}_{t-1}
                 # network parameters are whatever
-                for epoch in trange(num_epochs, desc=f'task {task} phase 1'):
+                for epoch in trange(num_epochs, desc=f'task {task+1} phase 1'):
                     self.train_epoch(complement_loader, opt, task, epoch)
                 # ==> network parameters are \tilde{q}_t
     
@@ -399,7 +400,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 # (3)
                 # TODO: ONLY USED FOR PREDICITION NOT PROPAGATION
                 # precondition: network prior is \tilde{q}_{t}
-                for epoch in trange(num_epochs, desc=f'task {task} phase 2'):
+                for epoch in trange(num_epochs, desc=f'task {task+1} phase 2'):
                     self.train_epoch(coreset_loader, opt, task, epoch)
                 # ==> network parameters are q_t
     
@@ -412,11 +413,11 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             accuracies = []
             for batch, (data, target) in enumerate(loader):
                 data, target = data.to(device), target.to(device)
-                predicts = []
-                for _ in range(self.bayesian_samples):
-                    pred = self(data)
-                    predicts.append(pred)
-                mean_pred = torch.stack(predicts).mean(0)
+                # E[argmax_y p(y | theta, x)] != argmax_y E[p(y | \theta, x)]
+                # lhs: 1 sample; rhs: can get better approximation via MC
+                # 1 sample is unbiased for the p(y | \theta, x), but argmax breaks this
+                preds = [self(data) for _ in range(self.bayesian_samples)]
+                mean_pred = torch.stack(preds).mean(0)
                 acc = accuracy(mean_pred, target)
                 accuracies.append(acc.item())
             wandb.log({'task': task, 'test_acc': np.mean(accuracies)})
@@ -432,7 +433,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                         coreset_k=params.coreset_k,
                         pretrain_epochs=params.pretrain_epochs
             )
-            model.train_run(pmnist_task_loaders(), num_epochs=params.epochs)
+            model.train_test_run(pmnist_task_loaders(), num_epochs=params.epochs)
         return model
 
     ddm_pmnist_run = dict(
