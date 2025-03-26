@@ -231,14 +231,13 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             return np.mean(losses), np.mean(accuracies)
 
     class BayesianLinear(nn.Module):
-        def __init__(self, in_dim, out_dim, init_w=None, init_b=None):
+        def __init__(self, in_dim, out_dim, init_std, init_w=None, init_b=None):
             super().__init__()
             if init_w is None:
                 init_w = torch.randn(out_dim, in_dim)
             if init_b is None:
                 init_b = torch.randn(out_dim)
 
-            init_std = 1e-6
             self.mu_w = nn.Parameter(init_w)
             self.log_sigma_w = nn.Parameter(torch.log(init_std * torch.ones(out_dim, in_dim)))
             self.mu_b = nn.Parameter(init_b)
@@ -261,7 +260,9 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
             self,
             in_dim, 
             hidden_dim, 
-            out_dim, 
+            out_dim,
+            layer_init_std=1e-3,
+            per_task_opt=False,
             bayesian_samples=1,
             coreset_k=0, 
             pretrain_epochs=5,
@@ -273,12 +274,14 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
 
             super().__init__()
             self.logging_every = logging_every
+            self.per_task_opt = per_task_opt
             self.bayesian_samples = bayesian_samples
             self.coreset_k = coreset_k
             self.layers = nn.Sequential(
                 BayesianLinear(
                     in_dim,
                     hidden_dim,
+                    layer_init_std,
                     init_w=baseline_mnist.linear[0].weight,
                     init_b=baseline_mnist.linear[0].bias
                 ),
@@ -286,6 +289,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 BayesianLinear(
                     hidden_dim,
                     hidden_dim,
+                    layer_init_std,
                     init_w=baseline_mnist.linear[2].weight,
                     init_b=baseline_mnist.linear[2].bias
                 ),
@@ -293,6 +297,7 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 BayesianLinear(
                     hidden_dim,
                     out_dim,
+                    layer_init_std,
                     init_w=baseline_mnist.linear[4].weight,
                     init_b=baseline_mnist.linear[4].bias
                 ),
@@ -394,6 +399,9 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
                 coreset_loader = self.select_coreset(train_loader.dataset, old_coreset)
                 complement_loader = self.select_augmented_complement(train_loader.dataset, old_coreset, list(coreset_loader.dataset))
 
+                if self.per_task_opt:
+                    opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+
                 # restore network parameters to \tilde{q}_{t}
                 if task > 0:
                     self.restore_from_prior()
@@ -440,6 +448,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
         with wandb.init(project='vcl', config=params):
             params = wandb.config
             model = Ddm(28*28, 100, params.classes,
+                        layer_init_std=params.layer_init_std,
+                        per_task_opt=params.per_task_opt,
                         bayesian_samples=params.bayesian_samples, 
                         coreset_k=params.coreset_k,
                         pretrain_epochs=params.pretrain_epochs
@@ -452,6 +462,8 @@ def _(F, nn, np, pmnist_task_loaders, torch, trange, wandb):
         epochs=100,
         pretrain_epochs=10,
         coreset_k=0,
+        per_task_opt=False,
+        layer_init_std=1e-6,
         bayesian_samples=100,
         problem='pmnist',
         model='vcl'
