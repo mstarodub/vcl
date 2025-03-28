@@ -290,7 +290,7 @@ class Ddm(nn.Module):
             if batch % self.logging_every == 0:
                 wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
                 # log tensors
-                for bli, bl in enumerate(self.bayesian_layers):
+                for bli, bl in enumerate(self.layers):
                   if isinstance(bl, BayesianLinear):
                       wandb.log({
                           f'{bli}_sigma_w': torch.exp(bl.log_sigma_w).detach(),
