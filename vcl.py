@@ -7,7 +7,6 @@ import torchvision.transforms.v2 as transforms
 from tqdm.auto import tqdm, trange
 import matplotlib.pyplot as plt
 import wandb
-wandb.login()
 
 def torch_device(enable_mps=False, enable_cuda=True):
     if torch.backends.mps.is_available() and enable_mps:
@@ -22,9 +21,6 @@ def torch_device(enable_mps=False, enable_cuda=True):
 def seed(seed=0):
     np.random.seed(seed)
     torch.manual_seed(seed)
-
-print("torch version", torch.__version__, "running on", torch.ones(1, device=torch_device()).device)
-seed(0)
 
 def transform():
     return transforms.Compose([
@@ -396,15 +392,21 @@ def model_pipeline(params):
         model.train_test_run(pmnist_task_loaders(), num_epochs=params.epochs)
     return model
 
-ddm_pmnist_run = dict(
-    classes=10,
-    epochs=100,
-    pretrain_epochs=1,
-    coreset_k=0,
-    per_task_opt=False,
-    layer_init_std=1e-3,
-    bayesian_samples=100,
-    problem='pmnist',
-    model='vcl'
-)
-model = model_pipeline(ddm_pmnist_run)
+if __name__ == '__main__':
+  wandb.login()
+
+  print("torch version", torch.__version__, "running on", torch.ones(1, device=torch_device()).device)
+  seed(0)
+
+  ddm_pmnist_run = dict(
+      classes=10,
+      epochs=100,
+      pretrain_epochs=1,
+      coreset_k=0,
+      per_task_opt=False,
+      layer_init_std=1e-3,
+      bayesian_samples=100,
+      problem='pmnist',
+      model='vcl'
+  )
+  model = model_pipeline(ddm_pmnist_run)
