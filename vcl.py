@@ -166,6 +166,9 @@ class BayesianLinear(nn.Module):
         if init_b is None:
             init_b = torch.zeros(out_dim)
 
+        assert init_w.size(dim=0) == out_dim and init_w.size(dim=1) == in_dim
+        assert init_b.size(dim=0) == out_dim
+
         self.mu_w = nn.Parameter(init_w)
         self.log_sigma_w = nn.Parameter(torch.log(init_std * torch.ones(out_dim, in_dim)))
         self.mu_b = nn.Parameter(init_b)
