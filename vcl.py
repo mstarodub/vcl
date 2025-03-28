@@ -300,7 +300,7 @@ class Ddm(nn.Module):
                 for bli, bl in enumerate(self.layers):
                   if isinstance(bl, BayesianLinear):
                       wandb.log({
-                          f'{bli}_sigma_w': torch.exp(bl.log_sigma_w).detach(),
+                          f'{bli}_sigma_w': torch.std(torch.exp(bl.log_sigma_w)).detach().item(),
                       })
             loss.backward()
             opt.step()
