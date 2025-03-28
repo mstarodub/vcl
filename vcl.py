@@ -387,7 +387,7 @@ class Ddm(nn.Module):
           task_accuracy = np.mean(task_accuracies)
           wandb.log({'task': task, f'test_acc_task_{test_task}': task_accuracy})
           avg_accuracies.append(task_accuracy)
-        wandb.log({'task': task, 'test_acc_avg': np.mean(avg_accuracies)})
+        wandb.log({'task': task, 'test_acc': np.mean(avg_accuracies)})
 
 def accuracy(pred, target):
     return (pred.argmax(dim=1) == target).sum() / pred.shape[0]
