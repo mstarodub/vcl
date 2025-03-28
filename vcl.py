@@ -60,7 +60,7 @@ def pmnist_task_loaders():
           batch_size=batch_size,
           num_workers=12 if torch.cuda.is_available() else 0
         ))
-        loaders.append((train_loader, cumulative_test_loaders))
+        loaders.append((train_loader, cumulative_test_loaders.copy()))
     return loaders
 
 def visualize_sample_img(loader):
