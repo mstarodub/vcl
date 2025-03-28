@@ -44,7 +44,7 @@ def pmnist_task_loaders():
     num_tasks = 10
     batch_size = 256
     perms = [torch.randperm(28 * 28) for _ in range(num_tasks)]
-    loaders, cumulative_test_datasets = [], []
+    loaders, cumulative_test_loaders = [], []
     for task in range(num_tasks):
         tf = transform_permute(perms[task])
         data_train = datasets.MNIST('./data', train=True, download=True, transform=tf, target_transform=torch.tensor)
@@ -55,14 +55,12 @@ def pmnist_task_loaders():
             shuffle=True,
             num_workers=12 if torch.cuda.is_available() else 0
         )
-        cumulative_test_datasets.append(data_test)
-        test_loader = torch.utils.data.DataLoader(
-            torch.utils.data.ConcatDataset(cumulative_test_datasets),
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=12 if torch.cuda.is_available() else 0
-        )
-        loaders.append((train_loader, test_loader))
+        cumulative_test_loaders.append(torch.utils.data.DataLoader(
+          data_test,
+          batch_size=batch_size,
+          num_workers=12 if torch.cuda.is_available() else 0
+        ))
+        loaders.append((train_loader, cumulative_test_loaders))
     return loaders
 
 def visualize_sample_img(loader):
@@ -290,6 +288,12 @@ class Ddm(nn.Module):
             acc = accuracy(pred, target)
             if batch % self.logging_every == 0:
                 wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
+                # log tensors
+                for bli, bl in enumerate(self.bayesian_layers):
+                  if isinstance(bl, BayesianLinear):
+                      wandb.log({
+                          f'{bli}_sigma_w': torch.exp(bl.log_sigma_w).detach(),
+                      })
             loss.backward()
             opt.step()
 
@@ -330,7 +334,7 @@ class Ddm(nn.Module):
         opt = torch.optim.Adam(self.parameters(), lr=1e-3)
         wandb.watch(self, log_freq=100)
         old_coreset = []
-        for task, (train_loader, test_loader) in enumerate(tasks):
+        for task, (train_loader, test_loaders) in enumerate(tasks):
             coreset_loader = self.select_coreset(train_loader.dataset, old_coreset)
             complement_loader = self.select_augmented_complement(train_loader.dataset, old_coreset, list(coreset_loader.dataset))
 
@@ -357,23 +361,28 @@ class Ddm(nn.Module):
                 self.train_epoch(coreset_loader, opt, task, epoch)
             # ==> network parameters are q_t
 
-            self.test_run(test_loader, task)
+            self.test_run(test_loaders, task)
 
     @torch.no_grad()
-    def test_run(self, loader, task):
+    def test_run(self, loaders, task):
         self.eval()
         device = torch_device()
-        accuracies = []
-        for batch, (data, target) in enumerate(loader):
-            data, target = data.to(device), target.to(device)
-            # E[argmax_y p(y | theta, x)] != argmax_y E[p(y | \theta, x)]
-            # lhs: 1 sample; rhs: can get better approximation via MC
-            # 1 sample is unbiased for the p(y | \theta, x), but argmax breaks this
-            preds = [self(data) for _ in range(self.bayesian_samples)]
-            mean_pred = torch.stack(preds).mean(0)
-            acc = accuracy(mean_pred, target)
-            accuracies.append(acc.item())
-        wandb.log({'task': task, 'test_acc': np.mean(accuracies)})
+        avg_accuracies = []
+        for test_task, loader in enumerate(loaders):
+          task_accuracies = []
+          for batch, (data, target) in enumerate(loader):
+              data, target = data.to(device), target.to(device)
+              # E[argmax_y p(y | theta, x)] != argmax_y E[p(y | \theta, x)]
+              # lhs: 1 sample; rhs: can get better approximation via MC
+              # 1 sample is unbiased for the p(y | \theta, x), but argmax breaks this
+              preds = [self(data) for _ in range(self.bayesian_samples)]
+              mean_pred = torch.stack(preds).mean(0)
+              acc = accuracy(mean_pred, target)
+              task_accuracies.append(acc.item())
+          task_accuracy = np.mean(task_accuracies)
+          wandb.log({'task': task, f'test_acc_task_{test_task}': task_accuracy})
+          avg_accuracies.append(task_accuracy)
+        wandb.log({'task': task, 'test_acc_avg': np.mean(avg_accuracies)})
 
 def accuracy(pred, target):
     return (pred.argmax(dim=1) == target).sum() / pred.shape[0]
