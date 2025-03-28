@@ -198,7 +198,8 @@ class Ddm(nn.Module):
 
         baseline_mnist = Net(in_dim, hidden_dim, out_dim).to(torch_device())
         baseline_mnist = torch.compile(baseline_mnist)
-        baseline_mnist.train_run(*pmnist_task_loaders()[0], pretrain_epochs)
+        baseline_loaders = pmnist_task_loaders()[0]
+        baseline_mnist.train_run(baseline_loaders[0], baseline_loaders[1][0], pretrain_epochs)
 
         super().__init__()
         self.logging_every = logging_every
