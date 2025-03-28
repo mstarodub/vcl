@@ -161,9 +161,10 @@ class BayesianLinear(nn.Module):
     def __init__(self, in_dim, out_dim, init_std, init_w=None, init_b=None):
         super().__init__()
         if init_w is None:
-            init_w = torch.randn(out_dim, in_dim)
+            init_w = torch.empty(out_dim, in_dim)
+            torch.nn.init.kaiming_normal_(init_w, mode='fan_in', nonlinearity='relu')
         if init_b is None:
-            init_b = torch.randn(out_dim)
+            init_b = torch.zeros(out_dim)
 
         self.mu_w = nn.Parameter(init_w)
         self.log_sigma_w = nn.Parameter(torch.log(init_std * torch.ones(out_dim, in_dim)))
@@ -196,10 +197,13 @@ class Ddm(nn.Module):
         logging_every=10
     ):
 
-        baseline_mnist = Net(in_dim, hidden_dim, out_dim).to(torch_device())
-        baseline_mnist = torch.compile(baseline_mnist)
-        baseline_loaders = pmnist_task_loaders()[0]
-        baseline_mnist.train_run(baseline_loaders[0], baseline_loaders[1][0], pretrain_epochs)
+        if pretrain_epochs > 0:
+          mle = Net(in_dim, hidden_dim, out_dim).to(torch_device())
+          mle = torch.compile(mle)
+          baseline_loaders = pmnist_task_loaders()[0]
+          mle.train_run(baseline_loaders[0], baseline_loaders[1][0], pretrain_epochs)
+        else:
+          mle = None
 
         super().__init__()
         self.logging_every = logging_every
@@ -211,24 +215,24 @@ class Ddm(nn.Module):
                 in_dim,
                 hidden_dim,
                 layer_init_std,
-                init_w=baseline_mnist.linear[0].weight,
-                init_b=baseline_mnist.linear[0].bias
+                init_w=mle.linear[0].weight if mle else None,
+                init_b=mle.linear[0].bias if mle else None
             ),
             nn.ReLU(),
             BayesianLinear(
                 hidden_dim,
                 hidden_dim,
                 layer_init_std,
-                init_w=baseline_mnist.linear[2].weight,
-                init_b=baseline_mnist.linear[2].bias
+                init_w=mle.linear[2].weight if mle else None,
+                init_b=mle.linear[2].bias if mle else None
             ),
             nn.ReLU(),
             BayesianLinear(
                 hidden_dim,
                 out_dim,
                 layer_init_std,
-                init_w=baseline_mnist.linear[4].weight,
-                init_b=baseline_mnist.linear[4].bias
+                init_w=mle.linear[4].weight if mle else None,
+                init_b=mle.linear[4].bias if mle else None
             ),
         )
 
