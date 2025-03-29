@@ -137,7 +137,7 @@ class Net(nn.Module):
 
     def train_run(self, train_loader, test_loader, num_epochs=100):
         loss_fn = nn.CrossEntropyLoss()
-        opt = torch.optim.AdamW(self.parameters(), lr=1e-3)
+        opt = torch.optim.Adam(self.parameters(), lr=1e-3)
         for i in trange(num_epochs, desc='pretrain'):
             train_loss, train_acc = self.train_epoch(train_loader, loss_fn, opt)
             test_loss, test_acc = self.test_run(test_loader, loss_fn)
@@ -193,7 +193,7 @@ class Ddm(nn.Module):
         hidden_dim,
         out_dim,
         layer_init_std=1e-3,
-        per_task_opt=False,
+        per_task_opt=True,
         bayesian_test_samples=1,
         bayesian_train_samples=1,
         coreset_k=0,
@@ -320,7 +320,7 @@ class Ddm(nn.Module):
         )
         return torch.utils.data.DataLoader(
             coreset_dataset,
-            batch_size=64,
+            batch_size=256,
             shuffle=True if coreset else False,
             num_workers=12 if torch.cuda.is_available() else 0
         )
@@ -423,7 +423,7 @@ if __name__ == '__main__':
   ddm_pmnist_run = dict(
       classes=10,
       epochs=100,
-      pretrain_epochs=10,
+      pretrain_epochs=100,
       coreset_k=0,
       per_task_opt=False,
       layer_init_std=1e-6,
