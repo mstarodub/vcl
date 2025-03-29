@@ -196,7 +196,7 @@ class Ddm(nn.Module):
         per_task_opt=True,
         bayesian_test_samples=1,
         bayesian_train_samples=1,
-        coreset_k=0,
+        coreset_size=0,
         mle=None,
         logging_every=10
     ):
@@ -206,7 +206,7 @@ class Ddm(nn.Module):
         self.per_task_opt = per_task_opt
         self.bayesian_test_samples = bayesian_test_samples
         self.bayesian_train_samples = bayesian_train_samples
-        self.coreset_k = coreset_k
+        self.coreset_size = coreset_size
         self.layers = nn.Sequential(
             BayesianLinear(
                 in_dim,
@@ -302,19 +302,18 @@ class Ddm(nn.Module):
             opt.step()
 
     # sample from (D_t) \cup C_{t-1}
-    @staticmethod
-    def select_coreset(task_size, coreset_size, old_coreset: Optional[List[Set[int]]] = None) -> List[Set[int]]:
-        assert coreset_size <= task_size
+    def select_coreset(self, task_size, old_coreset: Optional[List[Set[int]]]) -> List[Set[int]]:
+        assert self.coreset_size <= task_size
         if not old_coreset:
-            return [set(np.random.permutation(np.arange(0, task_size))[:coreset_size])]
+            return [set(np.random.permutation(np.arange(0, task_size))[:self.coreset_size])]
         for task in old_coreset:
             assert max(task) < task_size
         covered_tasks = len(old_coreset)
         strat_size = len(old_coreset[0])
         for task in old_coreset:
             assert len(task) == strat_size
-        assert coreset_size // covered_tasks == strat_size
-        new_strat_size = coreset_size // (covered_tasks + 1)
+        assert self.coreset_size // covered_tasks == strat_size
+        new_strat_size = self.coreset_size // (covered_tasks + 1)
         new_coreset = []
         for task in old_coreset:
             new_coreset.append(set(np.random.choice(list(task), new_strat_size, replace=False)))
@@ -355,10 +354,12 @@ class Ddm(nn.Module):
         self.train()
         opt = torch.optim.Adam(self.parameters(), lr=1e-3)
         wandb.watch(self, log_freq=100)
-        old_coreset = []
-        for task, (train_loader, test_loaders) in enumerate(tasks):
-            coreset_loader = self.select_coreset(train_loader.dataset, old_coreset)
-            complement_loader = self.select_augmented_complement(train_loader.dataset, old_coreset, list(coreset_loader.dataset))
+        old_coreset_idx = []
+        for task, (train_loaders, test_loaders) in enumerate(tasks):
+            coreset_idx = self.select_coreset(len(train_loaders[-1].dataset), old_coreset_idx)
+            complement_idx = self.select_augmented_complement(len(train_loaders[-1].dataset), old_coreset_idx, coreset_idx)
+            coreset_loader = self.create_dataloader(coreset_idx, train_loaders)
+            complement_loader = self.create_dataloader(complement_idx, train_loaders)
 
             if self.per_task_opt:
                 opt = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -416,25 +417,25 @@ def model_pipeline(params):
         params = wandb.config
         if params.problem == 'pmnist':
           if params.pretrain_epochs > 0:
-            mle = Net(in_dim, hidden_dim, out_dim).to(torch_device())
+            mle = Net(params.in_dim, params.hidden_dim, params.out_dim).to(torch_device())
             mle = torch.compile(mle)
             baseline_loaders = pmnist_task_loaders()[0]
-            mle.train_run(baseline_loaders[0], baseline_loaders[1][0], params.pretrain_epochs)
+            mle.train_run(baseline_loaders[0][0], baseline_loaders[1][0], params.pretrain_epochs)
           else:
             mle = None
           loaders = pmnist_task_loaders()
         elif params.problem == 'smnist':
           loaders = splitmnist_task_loaders()
-          mle=None
+          mle = None
         else:
           loaders, mle = None, None
-        model = Ddm(28*28, params.hiddensize, params.classes,
+        model = Ddm(params.in_dim, params.hidden_dim, params.out_dim,
                     batch_size=params.batch_size,
                     layer_init_std=params.layer_init_std,
                     per_task_opt=params.per_task_opt,
                     bayesian_test_samples=params.bayesian_test_samples,
                     bayesian_train_samples=params.bayesian_train_samples,
-                    coreset_k=params.coreset_k,
+                    coreset_size=params.coreset_size,
                     mle=mle
         ).to(torch_device())
         model = torch.compile(model)
@@ -448,12 +449,13 @@ if __name__ == '__main__':
   seed(0)
 
   ddm_pmnist_run = dict(
-      classes=10,
-      hiddensize=100,
+      in_dim=28*28,
+      hidden_dim=100,
+      out_dim=10,
       epochs=100,
       batch_size=256,
       pretrain_epochs=10,
-      coreset_k=0,
+      coreset_size=0,
       per_task_opt=False,
       layer_init_std=1e-11,
       bayesian_test_samples=100,
@@ -463,12 +465,13 @@ if __name__ == '__main__':
   )
 
   ddm_smnist_run = dict(
-    classes=2,
-    hiddensize=256,
+    in_dim=28*28,
+    hidden_dim=256,
+    out_dim=2,
     epochs=120,
     batch_size=None,
     pretrain_epochs=10,
-    coreset_k=0,
+    coreset_size=0,
     per_task_opt=False,
     layer_init_std=1e-6,
     bayesian_test_samples=100,
@@ -477,5 +480,5 @@ if __name__ == '__main__':
     model='vcl'
   )
 
-  # model = model_pipeline(ddm_pmnist_run)
-  model = model_pipeline(ddm_smnist_run)
+  model = model_pipeline(ddm_pmnist_run)
+  # model = model_pipeline(ddm_smnist_run)
