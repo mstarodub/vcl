@@ -7,6 +7,7 @@ import torchvision.transforms.v2 as transforms
 from tqdm.auto import tqdm, trange
 import matplotlib.pyplot as plt
 import wandb
+from typing import Optional, List, Set, Any
 
 def torch_device(enable_mps=False, enable_cuda=True):
     if torch.backends.mps.is_available() and enable_mps:
@@ -44,23 +45,23 @@ def pmnist_task_loaders():
     num_tasks = 10
     batch_size = 256
     perms = [torch.randperm(28 * 28) for _ in range(num_tasks)]
-    loaders, cumulative_test_loaders = [], []
+    loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
     for task in range(num_tasks):
         tf = transform_permute(perms[task])
         data_train = datasets.MNIST('./data', train=True, download=True, transform=tf, target_transform=torch.tensor)
         data_test = datasets.MNIST('./data', train=False, download=True, transform=tf, target_transform=torch.tensor)
-        train_loader = torch.utils.data.DataLoader(
+        cumulative_train_loaders.append(torch.utils.data.DataLoader(
             data_train,
             batch_size=batch_size,
             shuffle=True,
             num_workers=12 if torch.cuda.is_available() else 0
-        )
+        ))
         cumulative_test_loaders.append(torch.utils.data.DataLoader(
           data_test,
           batch_size=batch_size,
           num_workers=12 if torch.cuda.is_available() else 0
         ))
-        loaders.append((train_loader, cumulative_test_loaders.copy()))
+        loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
     return loaders
 
 def visualize_sample_img(loader):
@@ -300,41 +301,54 @@ class Ddm(nn.Module):
             loss.backward()
             opt.step()
 
-    # sample(D_t) \cup C_{t-1}
-    def select_coreset(self, current_task_dataset, old_coreset):
-        idx_new = torch.randperm(len(current_task_dataset))[:self.coreset_k]
-        coreset = [current_task_dataset[i] for i in idx_new] + old_coreset
-
-        coreset_dataset = torch.utils.data.TensorDataset(
-            torch.stack([p[0] for p in coreset]) if coreset else torch.empty(0),
-            torch.stack([p[1] for p in coreset]) if coreset else torch.empty(0)
-        )
-        return torch.utils.data.DataLoader(
-            coreset_dataset,
-            batch_size=self.batch_size if self.batch_size else max(1,len(coreset_dataset)),
-            shuffle=True if coreset else False,
-            num_workers=12 if torch.cuda.is_available() else 0
-        )
+    # sample from (D_t) \cup C_{t-1}
+    @staticmethod
+    def select_coreset(task_size, coreset_size, old_coreset: Optional[List[Set[int]]] = None) -> List[Set[int]]:
+        assert coreset_size <= task_size
+        if not old_coreset:
+            return [set(np.random.permutation(np.arange(0, task_size))[:coreset_size])]
+        for task in old_coreset:
+            assert max(task) < task_size
+        covered_tasks = len(old_coreset)
+        strat_size = len(old_coreset[0])
+        for task in old_coreset:
+            assert len(task) == strat_size
+        assert coreset_size // covered_tasks == strat_size
+        new_strat_size = coreset_size // (covered_tasks + 1)
+        new_coreset = []
+        for task in old_coreset:
+            new_coreset.append(set(np.random.choice(list(task), new_strat_size, replace=False)))
+        new_coreset.append(set(np.random.choice(range(0, task_size), new_strat_size, replace=False)))
+        return new_coreset
 
     # returns (D_t \cup C_{t-1}) - C_t = (D_t - C_t) \cup (C_{t-1} - C_t)
-    def select_augmented_complement(self, current_task_dataset, old_coreset, new_coreset):
-        new_coreset_ids = set(id(p[0]) for p in new_coreset)
-        coreset_complement = [p for p in old_coreset if id(p[0]) not in new_coreset_ids]
-        data_complement_idx = [i for i in range(len(current_task_dataset)) if id(current_task_dataset[i][0]) not in new_coreset_ids]
-        data_complement_dataset = torch.utils.data.Subset(current_task_dataset, data_complement_idx)
-        coreset_complement_dataset = torch.utils.data.TensorDataset(
-            torch.stack([p[0] for p in coreset_complement]) if coreset_complement else torch.empty(0),
-            torch.stack([p[1] for p in coreset_complement]) if coreset_complement else torch.empty(0)
+    @staticmethod
+    def select_augmented_complement(task_size, old_coreset: Optional[List[Set[int]]], new_coreset: List[Set[int]]) -> List[Set[int]]:
+        complement: List[Set[int]] = []
+        if not old_coreset:
+            assert len(new_coreset) == 1
+            return [set(range(0, task_size)) - new_coreset[0]]
+        for i in range(len(new_coreset)):
+            if i == len(new_coreset) - 1:
+                strat = set(range(0, task_size)) - new_coreset[i]
+            else:
+                strat = set(old_coreset[i]) - new_coreset[i]
+            complement.append(strat)
+        return complement
+
+    # all_data is a list of dataloaders
+    def create_dataloader(self, indexes: List[Set[int]], all_data: List[Any]):
+        assert len(all_data) >= len(indexes)
+        data = [all_data[i].dataset[j] for i, idx_set in enumerate(indexes) for j in idx_set]
+        dataset = torch.utils.data.TensorDataset(
+            torch.stack([p[0] for p in data]) if data else torch.empty(0),
+            torch.stack([p[1] for p in data]) if data else torch.empty(0)
         )
-        union_dataset = torch.utils.data.ConcatDataset([
-          data_complement_dataset,
-          coreset_complement_dataset
-        ])
         return torch.utils.data.DataLoader(
-          union_dataset,
-          batch_size=self.batch_size if self.batch_size else len(union_dataset),
-          shuffle=True,
-          num_workers=12 if torch.cuda.is_available() else 0
+            dataset,
+            batch_size=self.batch_size if self.batch_size else max(1,len(dataset)),
+            shuffle=True if data else False,
+            num_workers=12 if torch.cuda.is_available() else 0
         )
 
     def train_test_run(self, tasks, num_epochs=100):
