@@ -73,11 +73,10 @@ def visualize_sample_img(loader):
     plt.show()
 
 def splitmnist_task_loaders():
-    batch_size=256
-    loaders, cumulative_test_datasets = [], []
+    loaders, cumulative_test_loaders = [], []
 
     def transform_onehot(class_a, class_b):
-        one_hot = {class_a: torch.tensor([1, 0]), class_b: torch.tensor([0, 1])}
+        one_hot = {class_a: torch.tensor([1., 0.]), class_b: torch.tensor([0., 1.])}
         return lambda x: one_hot[int(x)]
 
     # 5 classification tasks
@@ -91,18 +90,17 @@ def splitmnist_task_loaders():
         test_idx = torch.nonzero(test_mask).squeeze()
         train_loader = torch.utils.data.DataLoader(
             torch.utils.data.Subset(train_ds, train_idx),
-            batch_size=batch_size,
+            batch_size=len(train_idx),
             shuffle=True,
             num_workers=12 if torch.cuda.is_available() else 0
         )
-        cumulative_test_datasets.append(torch.utils.data.Subset(test_ds, test_idx))
-        test_loader = torch.utils.data.DataLoader(
-            torch.utils.data.ConcatDataset(cumulative_test_datasets),
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=12 if torch.cuda.is_available() else 0
-        )
-        loaders.append((train_loader, test_loader))
+        cumulative_test_loaders.append(torch.utils.data.DataLoader(
+          torch.utils.data.Subset(test_ds, test_idx),
+          batch_size=len(test_idx),
+          shuffle=True,
+          num_workers=12 if torch.cuda.is_available() else 0
+        ))
+        loaders.append((train_loader, cumulative_test_loaders.copy()))
     return loaders
 
 class Net(nn.Module):
@@ -136,7 +134,7 @@ class Net(nn.Module):
         return np.mean(losses), np.mean(accuracies)
 
     def train_run(self, train_loader, test_loader, num_epochs=100):
-        loss_fn = nn.CrossEntropyLoss()
+        loss_fn = F.cross_entropy
         opt = torch.optim.Adam(self.parameters(), lr=1e-3)
         for i in trange(num_epochs, desc='pretrain'):
             train_loss, train_acc = self.train_epoch(train_loader, loss_fn, opt)
@@ -192,25 +190,18 @@ class Ddm(nn.Module):
         in_dim,
         hidden_dim,
         out_dim,
+        batch_size=256,
         layer_init_std=1e-3,
         per_task_opt=True,
         bayesian_test_samples=1,
         bayesian_train_samples=1,
         coreset_k=0,
-        pretrain_epochs=5,
+        mle=None,
         logging_every=10
     ):
-
-        if pretrain_epochs > 0:
-          mle = Net(in_dim, hidden_dim, out_dim).to(torch_device())
-          mle = torch.compile(mle)
-          baseline_loaders = pmnist_task_loaders()[0]
-          mle.train_run(baseline_loaders[0], baseline_loaders[1][0], pretrain_epochs)
-        else:
-          mle = None
-
         super().__init__()
         self.logging_every = logging_every
+        self.batch_size = batch_size
         self.per_task_opt = per_task_opt
         self.bayesian_test_samples = bayesian_test_samples
         self.bayesian_train_samples = bayesian_train_samples
@@ -320,14 +311,13 @@ class Ddm(nn.Module):
         )
         return torch.utils.data.DataLoader(
             coreset_dataset,
-            batch_size=256,
+            batch_size=self.batch_size if self.batch_size else max(1,len(coreset_dataset)),
             shuffle=True if coreset else False,
             num_workers=12 if torch.cuda.is_available() else 0
         )
 
     # returns (D_t \cup C_{t-1}) - C_t = (D_t - C_t) \cup (C_{t-1} - C_t)
-    @staticmethod
-    def select_augmented_complement(current_task_dataset, old_coreset, new_coreset):
+    def select_augmented_complement(self, current_task_dataset, old_coreset, new_coreset):
         new_coreset_ids = set(id(p[0]) for p in new_coreset)
         coreset_complement = [p for p in old_coreset if id(p[0]) not in new_coreset_ids]
         data_complement_idx = [i for i in range(len(current_task_dataset)) if id(current_task_dataset[i][0]) not in new_coreset_ids]
@@ -336,10 +326,16 @@ class Ddm(nn.Module):
             torch.stack([p[0] for p in coreset_complement]) if coreset_complement else torch.empty(0),
             torch.stack([p[1] for p in coreset_complement]) if coreset_complement else torch.empty(0)
         )
-        return torch.utils.data.DataLoader(torch.utils.data.ConcatDataset([
-            data_complement_dataset,
-            coreset_complement_dataset
-        ]), batch_size=256, shuffle=True, num_workers=12 if torch.cuda.is_available() else 0)
+        union_dataset = torch.utils.data.ConcatDataset([
+          data_complement_dataset,
+          coreset_complement_dataset
+        ])
+        return torch.utils.data.DataLoader(
+          union_dataset,
+          batch_size=self.batch_size if self.batch_size else len(union_dataset),
+          shuffle=True,
+          num_workers=12 if torch.cuda.is_available() else 0
+        )
 
     def train_test_run(self, tasks, num_epochs=100):
         self.train()
@@ -397,21 +393,38 @@ class Ddm(nn.Module):
         wandb.log({'task': task, 'test_acc': np.mean(avg_accuracies)})
 
 def accuracy(pred, target):
-    return (pred.argmax(dim=1) == target).sum() / pred.shape[0]
+    # undo one-hot encoding, if applicable
+    target_idx = target.argmax(dim=1) if target.ndim == pred.ndim else target
+    return (pred.argmax(dim=1) == target_idx).sum() / pred.shape[0]
 
 def model_pipeline(params):
     with wandb.init(project='vcl', config=params):
         params = wandb.config
-        model = Ddm(28*28, 100, params.classes,
+        if params.problem == 'pmnist':
+          if params.pretrain_epochs > 0:
+            mle = Net(in_dim, hidden_dim, out_dim).to(torch_device())
+            mle = torch.compile(mle)
+            baseline_loaders = pmnist_task_loaders()[0]
+            mle.train_run(baseline_loaders[0], baseline_loaders[1][0], params.pretrain_epochs)
+          else:
+            mle = None
+          loaders = pmnist_task_loaders()
+        elif params.problem == 'smnist':
+          loaders = splitmnist_task_loaders()
+          mle=None
+        else:
+          loaders, mle = None, None
+        model = Ddm(28*28, params.hiddensize, params.classes,
+                    batch_size=params.batch_size,
                     layer_init_std=params.layer_init_std,
                     per_task_opt=params.per_task_opt,
                     bayesian_test_samples=params.bayesian_test_samples,
                     bayesian_train_samples=params.bayesian_train_samples,
                     coreset_k=params.coreset_k,
-                    pretrain_epochs=params.pretrain_epochs
+                    mle=mle
         ).to(torch_device())
         model = torch.compile(model)
-        model.train_test_run(pmnist_task_loaders(), num_epochs=params.epochs)
+        model.train_test_run(loaders, num_epochs=params.epochs)
     return model
 
 if __name__ == '__main__':
@@ -422,14 +435,33 @@ if __name__ == '__main__':
 
   ddm_pmnist_run = dict(
       classes=10,
+      hiddensize=100,
       epochs=100,
-      pretrain_epochs=100,
+      batch_size=256,
+      pretrain_epochs=10,
       coreset_k=0,
       per_task_opt=False,
-      layer_init_std=1e-6,
+      layer_init_std=1e-11,
       bayesian_test_samples=100,
       bayesian_train_samples=10,
       problem='pmnist',
       model='vcl'
   )
-  model = model_pipeline(ddm_pmnist_run)
+
+  ddm_smnist_run = dict(
+    classes=2,
+    hiddensize=256,
+    epochs=120,
+    batch_size=None,
+    pretrain_epochs=10,
+    coreset_k=0,
+    per_task_opt=False,
+    layer_init_std=1e-6,
+    bayesian_test_samples=100,
+    bayesian_train_samples=10,
+    problem='smnist',
+    model='vcl'
+  )
+
+  # model = model_pipeline(ddm_pmnist_run)
+  model = model_pipeline(ddm_smnist_run)
