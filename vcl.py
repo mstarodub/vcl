@@ -194,7 +194,8 @@ class Ddm(nn.Module):
         out_dim,
         layer_init_std=1e-3,
         per_task_opt=False,
-        bayesian_samples=1,
+        bayesian_test_samples=1,
+        bayesian_train_samples=1,
         coreset_k=0,
         pretrain_epochs=5,
         logging_every=10
@@ -211,7 +212,8 @@ class Ddm(nn.Module):
         super().__init__()
         self.logging_every = logging_every
         self.per_task_opt = per_task_opt
-        self.bayesian_samples = bayesian_samples
+        self.bayesian_test_samples = bayesian_test_samples
+        self.bayesian_train_samples = bayesian_train_samples
         self.coreset_k = coreset_k
         self.layers = nn.Sequential(
             BayesianLinear(
@@ -291,9 +293,11 @@ class Ddm(nn.Module):
         for batch, (data, target) in enumerate(loader):
             data, target = data.to(device), target.to(device)
             opt.zero_grad()
-            pred = self(data)
-            loss = -self.sgvb_mc(pred, target) + self.compute_kl() / len(loader.dataset)
-            acc = accuracy(pred, target)
+            preds = [self(data) for _ in range(self.bayesian_train_samples)]
+            mean_pred = torch.stack(preds).mean(0)
+            losses = torch.stack([self.sgvb_mc(pred, target) for pred in preds])
+            loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
+            acc = accuracy(mean_pred, target)
             if batch % self.logging_every == 0:
                 wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
                 # log tensors
@@ -383,7 +387,7 @@ class Ddm(nn.Module):
               # E[argmax_y p(y | theta, x)] != argmax_y E[p(y | \theta, x)]
               # lhs: 1 sample; rhs: can get better approximation via MC
               # 1 sample is unbiased for the p(y | \theta, x), but argmax breaks this
-              preds = [self(data) for _ in range(self.bayesian_samples)]
+              preds = [self(data) for _ in range(self.bayesian_test_samples)]
               mean_pred = torch.stack(preds).mean(0)
               acc = accuracy(mean_pred, target)
               task_accuracies.append(acc.item())
@@ -401,7 +405,8 @@ def model_pipeline(params):
         model = Ddm(28*28, 100, params.classes,
                     layer_init_std=params.layer_init_std,
                     per_task_opt=params.per_task_opt,
-                    bayesian_samples=params.bayesian_samples,
+                    bayesian_test_samples=params.bayesian_test_samples,
+                    bayesian_train_samples=params.bayesian_train_samples,
                     coreset_k=params.coreset_k,
                     pretrain_epochs=params.pretrain_epochs
         ).to(torch_device())
@@ -418,11 +423,12 @@ if __name__ == '__main__':
   ddm_pmnist_run = dict(
       classes=10,
       epochs=100,
-      pretrain_epochs=1,
+      pretrain_epochs=10,
       coreset_k=0,
       per_task_opt=False,
-      layer_init_std=1e-3,
-      bayesian_samples=100,
+      layer_init_std=1e-6,
+      bayesian_test_samples=100,
+      bayesian_train_samples=10,
       problem='pmnist',
       model='vcl'
   )
