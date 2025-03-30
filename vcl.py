@@ -180,6 +180,8 @@ class BayesianLinear(nn.Module):
 
         assert init_w.size(dim=0) == out_dim and init_w.size(dim=1) == in_dim
         assert init_b.size(dim=0) == out_dim
+        self.in_dim = in_dim
+        self.out_dim = out_dim
 
         self.mu_w = nn.Parameter(init_w)
         self.log_sigma_w = nn.Parameter(torch.log(init_std * torch.ones(out_dim, in_dim)))
@@ -333,13 +335,16 @@ class Ddm(nn.Module):
             )
         return res
 
-
-    def forward(self, x, task=None):
-        if self.multihead:
-          x = self.shared(x)
-          return self.heads[task](x)
-        else:
-          return self.shared(x)
+    def forward(self, x, task_idx=None):
+      x = self.shared(x)
+      if self.multihead:
+        batch_size, out_dim = x.shape[0], self.heads[0].out_dim
+        output = torch.zeros(batch_size, out_dim, device=x.device, dtype=x.dtype)
+        for head_idx, head in enumerate(self.heads):
+          # (batch_size, out_dim) * (batch_size, 1)
+          output += head(x) * (task_idx == head_idx).unsqueeze(1)
+        return output
+      return x
 
     # returns the first component of L_SGVB, without the N factor
     @staticmethod
@@ -353,9 +358,6 @@ class Ddm(nn.Module):
         # and finally arrive at eq (3) without the N factor
         return -F.cross_entropy(pred, target)
 
-    def fix_gradients(self, task=None):
-      pass
-
     def train_epoch(self, loader, opt, task, epoch):
         device = torch_device()
         for batch, batch_data in enumerate(loader):
@@ -364,11 +366,11 @@ class Ddm(nn.Module):
             else:
               (data, target), t = batch_data, None
             data, target = data.to(device), target.to(device)
-            opt.zero_grad()
+            self.zero_grad()
             preds = [self(data, task=t) for _ in range(self.bayesian_train_samples)]
             mean_pred = torch.stack(preds).mean(0)
             losses = torch.stack([self.sgvb_mc(pred, target) for pred in preds])
-            loss = -losses.mean(0) + self.compute_kl(task=t) / len(loader.dataset)
+            loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
             acc = accuracy(mean_pred, target)
             if batch % self.logging_every == 0:
                 wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
@@ -379,7 +381,6 @@ class Ddm(nn.Module):
                           f'{bli}_sigma_w': torch.std(torch.exp(bl.log_sigma_w)).detach().item(),
                       })
             loss.backward()
-            self.fix_gradients(t)
             opt.step()
 
     # sample from (D_t) \cup C_{t-1}
@@ -552,7 +553,7 @@ if __name__ == '__main__':
       batch_size=256,
       pretrain_epochs=10,
       coreset_size=5000,
-      per_task_opt=False,
+      per_task_opt=True,
       layer_init_std=1e-10,
       bayesian_test_samples=100,
       bayesian_train_samples=10,
