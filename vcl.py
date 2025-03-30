@@ -32,7 +32,6 @@ def transform():
         transforms.Lambda(torch.flatten)
     ])
 
-
 def pmnist_task_loaders():
     def transform_permute(idx):
         return transforms.Compose([
@@ -76,19 +75,19 @@ def visualize_sample_img(loader):
     plt.show()
 
 def splitmnist_task_loaders():
-    loaders, cumulative_test_loaders = [], []
+    loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
 
     def transform_onehot(class_a, class_b):
         one_hot = {class_a: torch.tensor([1., 0.]), class_b: torch.tensor([0., 1.])}
         return lambda x: one_hot[int(x)]
 
-    def collate_add_task(task_idx):
+    def collate_add_task(task):
       def collate_fn(batch):
           data_list, target_list = zip(*batch)
           data_batch = torch.stack(data_list, 0)
           target_batch = torch.stack(target_list, 0)
-          task_idx_tensor = torch.full((len(batch),), task_idx)
-          return data_batch, target_batch, task_idx_tensor
+          task_tensor = torch.full((len(batch),), task)
+          return data_batch, target_batch, task_tensor
       return collate_fn
 
     # 5 classification tasks
@@ -101,13 +100,13 @@ def splitmnist_task_loaders():
         train_idx = torch.nonzero(train_mask).squeeze()
         test_idx = torch.nonzero(test_mask).squeeze()
         collate_fn = collate_add_task(task)
-        train_loader = torch.utils.data.DataLoader(
+        cumulative_train_loaders.append(torch.utils.data.DataLoader(
             torch.utils.data.Subset(train_ds, train_idx),
             batch_size=len(train_idx),
             shuffle=True,
             num_workers=12 if torch.cuda.is_available() else 0,
             collate_fn=collate_fn
-        )
+        ))
         cumulative_test_loaders.append(torch.utils.data.DataLoader(
           torch.utils.data.Subset(test_ds, test_idx),
           batch_size=len(test_idx),
@@ -115,7 +114,7 @@ def splitmnist_task_loaders():
           num_workers=12 if torch.cuda.is_available() else 0,
           collate_fn=collate_fn
         ))
-        loaders.append((train_loader, cumulative_test_loaders.copy()))
+        loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
     return loaders
 
 class Net(nn.Module):
@@ -397,7 +396,7 @@ class Ddm(nn.Module):
             # (2)
             # precondition: network prior is \tilde{q}_{t-1}
             # network parameters are whatever
-            for epoch in trange(num_epochs, desc=f'task {task+1} phase 1'):
+            for epoch in trange(num_epochs, desc=f'task {task} phase 1'):
                 self.train_epoch(complement_loader, opt, task, epoch)
             # ==> network parameters are \tilde{q}_t
 
@@ -406,7 +405,7 @@ class Ddm(nn.Module):
 
             # (3)
             # precondition: network prior is \tilde{q}_{t}
-            for epoch in trange(num_epochs, desc=f'task {task+1} phase 2'):
+            for epoch in trange(num_epochs, desc=f'task {task} phase 2'):
                 self.train_epoch(coreset_loader, opt, task, epoch)
             # ==> network parameters are q_t
 
@@ -417,7 +416,7 @@ class Ddm(nn.Module):
         self.eval()
         device = torch_device()
         avg_accuracies = []
-        for test_task, loader in enumerate(loaders):
+        for test_task, loader in tqdm(enumerate(loaders), desc=f'task {task} phase t'):
           task_accuracies = []
           for batch, batch_data in enumerate(loader):
               if self.multihead:
