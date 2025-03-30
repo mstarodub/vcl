@@ -306,7 +306,7 @@ class Ddm(nn.Module):
     def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
         return torch.sum(torch.log(sigma_2 / sigma_1) + (sigma_1**2 + (mu_1 - mu_2)**2)/(2*sigma_2**2) - 1/2)
 
-    def compute_kl(self, task=None):
+    def compute_kl(self):
         res = 0
         for bl in self.shared:
             if isinstance(bl, BayesianLinear):
@@ -322,15 +322,17 @@ class Ddm(nn.Module):
                     bl.prior_mu_b,
                     bl.prior_sigma_b
                 )
+        # notice that the gradients of the unused heads are zeroed and hence the KL terms are zero too
         if self.multihead:
-          head = self.heads[task]
-          res += self.kl_div_gaussians(
-            head.mu_w,
-            torch.exp(head.log_sigma_w),
-            head.prior_mu_w,
-            head.prior_sigma_b
-          )
+          for head in self.heads:
+            res += self.kl_div_gaussians(
+                head.mu_w,
+                torch.exp(head.log_sigma_w),
+                head.prior_mu_w,
+                head.prior_sigma_b
+            )
         return res
+
 
     def forward(self, x, task=None):
         if self.multihead:
