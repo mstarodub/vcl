@@ -135,7 +135,8 @@ class Net(nn.Module):
         device = torch_device()
         self.train()
         losses, accuracies = [], []
-        for data, target in loader:
+        for batch_data in loader:
+            data, target = batch_data[0], batch_data[1]
             data, target = data.to(device), target.to(device)
             opt.zero_grad()
             pred = self(data)
@@ -160,7 +161,8 @@ class Net(nn.Module):
         device = torch_device()
         self.eval()
         losses, accuracies = [], []
-        for data, target in loader:
+        for batch_data in loader:
+            data, target = batch_data[0], batch_data[1]
             data, target = data.to(device), target.to(device)
             pred = self(data)
             loss = loss_fn(pred, target)
