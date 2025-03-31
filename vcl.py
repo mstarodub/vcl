@@ -377,9 +377,9 @@ class Ddm(nn.Module):
             self.zero_grad()
             preds = [self(data, task=t) for _ in range(self.bayesian_train_samples)]
             mean_pred = torch.stack(preds).mean(0)
+            acc = accuracy(mean_pred, target)
             losses = torch.stack([self.sgvb_mc(pred, target) for pred in preds])
             loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
-            acc = accuracy(mean_pred, target)
             if batch % self.logging_every == 0:
                 wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
                 # log tensors
@@ -511,7 +511,7 @@ class Ddm(nn.Module):
 def accuracy(pred, target):
     # undo one-hot encoding, if applicable
     target_idx = target.argmax(dim=1) if target.ndim == pred.ndim else target
-    return (pred.argmax(dim=1) == target_idx).sum() / pred.shape[0]
+    return (pred.argmax(dim=1) == target_idx).float().mean()
 
 def model_pipeline(params, wandb_log=True):
     wandb_mode = "online" if wandb_log else "disabled"
@@ -544,7 +544,8 @@ def model_pipeline(params, wandb_log=True):
                     multihead=params.multihead,
                     mle=mle
         ).to(torch_device())
-        model = torch.compile(model)
+        # we have lots of dynamic control flow. not sure about this
+        # model = torch.compile(model)
         model.train_test_run(loaders, num_epochs=params.epochs)
     return model
 
@@ -579,7 +580,7 @@ if __name__ == '__main__':
     ntasks=5,
     epochs=120,
     batch_size=None,
-    pretrain_epochs=0,
+    pretrain_epochs=10,
     coreset_size=0,
     per_task_opt=False,
     layer_init_std=1e-6,
@@ -591,4 +592,4 @@ if __name__ == '__main__':
   )
 
   # model = model_pipeline(ddm_pmnist_run)
-  model = model_pipeline(ddm_smnist_run, wandb_log=False)
+  model = model_pipeline(ddm_smnist_run, wandb_log=True)
