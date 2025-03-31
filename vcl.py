@@ -333,18 +333,24 @@ class Ddm(nn.Module):
                 head.mu_w,
                 torch.exp(head.log_sigma_w),
                 head.prior_mu_w,
+                head.prior_sigma_w
+            )
+            res += self.kl_div_gaussians(
+                head.mu_b,
+                torch.exp(head.log_sigma_b),
+                head.prior_mu_b,
                 head.prior_sigma_b
             )
         return res
 
-    def forward(self, x, task_idx=None):
+    def forward(self, x, task=None):
       x = self.shared(x)
       if self.multihead:
         batch_size, out_dim = x.shape[0], self.heads[0].out_dim
         output = torch.zeros(batch_size, out_dim, device=x.device, dtype=x.dtype)
         for head_idx, head in enumerate(self.heads):
           # (batch_size, out_dim) * (batch_size, 1)
-          output += head(x) * (task_idx == head_idx).unsqueeze(1)
+          output += head(x) * (task == head_idx).unsqueeze(1)
         return output
       return x
 
@@ -420,14 +426,15 @@ class Ddm(nn.Module):
     # all_data is a list of dataloaders
     def create_dataloader(self, indexes: List[Set[int]], all_data: List[Any]):
         assert len(all_data) >= len(indexes)
-        data = [all_data[i].dataset[j] for i, idx_set in enumerate(indexes) for j in idx_set]
         if self.multihead:
+          data = [(all_data[i].dataset[j][0], all_data[i].dataset[j][1], i) for i, idx_set in enumerate(indexes) for j in idx_set]
           dataset = torch.utils.data.TensorDataset(
               torch.stack([p[0] for p in data]) if data else torch.empty(0),
               torch.stack([p[1] for p in data]) if data else torch.empty(0),
-              torch.stack([p[2] for p in data]) if data else torch.empty(0),
+              torch.tensor([p[2] for p in data]) if data else torch.empty(0),
           )
         else:
+          data = [all_data[i].dataset[j] for i, idx_set in enumerate(indexes) for j in idx_set]
           dataset = torch.utils.data.TensorDataset(
               torch.stack([p[0] for p in data]) if data else torch.empty(0),
               torch.stack([p[1] for p in data]) if data else torch.empty(0)
@@ -506,8 +513,9 @@ def accuracy(pred, target):
     target_idx = target.argmax(dim=1) if target.ndim == pred.ndim else target
     return (pred.argmax(dim=1) == target_idx).sum() / pred.shape[0]
 
-def model_pipeline(params):
-    with wandb.init(project='vcl', config=params):
+def model_pipeline(params, wandb_log=True):
+    wandb_mode = "online" if wandb_log else "disabled"
+    with wandb.init(project='vcl', config=params, mode=wandb_mode):
         params = wandb.config
         if params.problem == 'pmnist':
           baseline_loaders = pmnist_task_loaders()[0]
@@ -554,8 +562,8 @@ if __name__ == '__main__':
       epochs=100,
       batch_size=256,
       pretrain_epochs=10,
-      coreset_size=5000,
-      per_task_opt=True,
+      coreset_size=0,
+      per_task_opt=False,
       layer_init_std=1e-10,
       bayesian_test_samples=100,
       bayesian_train_samples=10,
@@ -571,7 +579,7 @@ if __name__ == '__main__':
     ntasks=5,
     epochs=120,
     batch_size=None,
-    pretrain_epochs=10,
+    pretrain_epochs=0,
     coreset_size=0,
     per_task_opt=False,
     layer_init_std=1e-6,
@@ -582,5 +590,5 @@ if __name__ == '__main__':
     model='vcl'
   )
 
-  model = model_pipeline(ddm_pmnist_run)
-  # model = model_pipeline(ddm_smnist_run)
+  # model = model_pipeline(ddm_pmnist_run)
+  model = model_pipeline(ddm_smnist_run, wandb_log=False)
