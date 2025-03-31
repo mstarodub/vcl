@@ -32,7 +32,7 @@ def transform():
         transforms.Lambda(torch.flatten)
     ])
 
-def pmnist_task_loaders():
+def pmnist_task_loaders(batch_size):
     def transform_permute(idx):
         return transforms.Compose([
             transform(),
@@ -44,7 +44,6 @@ def pmnist_task_loaders():
         ])
 
     num_tasks = 10
-    batch_size = 256
     perms = [torch.randperm(28 * 28) for _ in range(num_tasks)]
     loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
     for task in range(num_tasks):
@@ -53,13 +52,13 @@ def pmnist_task_loaders():
         data_test = datasets.MNIST('./data', train=False, download=True, transform=tf, target_transform=torch.tensor)
         cumulative_train_loaders.append(torch.utils.data.DataLoader(
             data_train,
-            batch_size=batch_size,
+            batch_size=batch_size if batch_size else max(1, len(data_train)),
             shuffle=True,
             num_workers=12 if torch.cuda.is_available() else 0
         ))
         cumulative_test_loaders.append(torch.utils.data.DataLoader(
           data_test,
-          batch_size=batch_size,
+          batch_size=batch_size if batch_size else max(1, len(data_test)),
           num_workers=12 if torch.cuda.is_available() else 0
         ))
         loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
@@ -74,12 +73,16 @@ def visualize_sample_img(loader):
     plt.axis('off')
     plt.show()
 
-def splitmnist_task_loaders():
+def splitmnist_task_loaders(batch_size):
     loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
 
+    # need to change the loss for this - extension
     def transform_onehot(class_a, class_b):
         one_hot = {class_a: torch.tensor([1., 0.]), class_b: torch.tensor([0., 1.])}
         return lambda x: one_hot[int(x)]
+
+    def transform_label(class_a, class_b):
+      return lambda x: torch.tensor(0 if x == class_a else 1)
 
     def collate_add_task(task):
       def collate_fn(batch):
@@ -92,8 +95,8 @@ def splitmnist_task_loaders():
 
     # 5 classification tasks
     for task, (a, b) in enumerate([(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]):
-        train_ds = datasets.MNIST('./data', train=True, download=True, transform=transform(), target_transform=transform_onehot(a, b))
-        test_ds = datasets.MNIST('./data', train=False, download=True, transform=transform(), target_transform=transform_onehot(a, b))
+        train_ds = datasets.MNIST('./data', train=True, download=True, transform=transform(), target_transform=transform_label(a, b))
+        test_ds = datasets.MNIST('./data', train=False, download=True, transform=transform(), target_transform=transform_label(a, b))
         # only include the two digits for this task
         train_mask = (train_ds.targets == a) | (train_ds.targets == b)
         test_mask = (test_ds.targets == a) | (test_ds.targets == b)
@@ -102,14 +105,14 @@ def splitmnist_task_loaders():
         collate_fn = collate_add_task(task)
         cumulative_train_loaders.append(torch.utils.data.DataLoader(
             torch.utils.data.Subset(train_ds, train_idx),
-            batch_size=len(train_idx),
+            batch_size=batch_size if batch_size else max(1, len(train_idx)),
             shuffle=True,
             num_workers=12 if torch.cuda.is_available() else 0,
             collate_fn=collate_fn
         ))
         cumulative_test_loaders.append(torch.utils.data.DataLoader(
           torch.utils.data.Subset(test_ds, test_idx),
-          batch_size=len(test_idx),
+          batch_size=batch_size if batch_size else max(1, len(test_idx)),
           shuffle=True,
           num_workers=12 if torch.cuda.is_available() else 0,
           collate_fn=collate_fn
@@ -518,11 +521,11 @@ def model_pipeline(params, wandb_log=True):
     with wandb.init(project='vcl', config=params, mode=wandb_mode):
         params = wandb.config
         if params.problem == 'pmnist':
-          baseline_loaders = pmnist_task_loaders()[0]
-          loaders = pmnist_task_loaders()
+          baseline_loaders = pmnist_task_loaders(params.batch_size)[0]
+          loaders = pmnist_task_loaders(params.batch_size)
         elif params.problem == 'smnist':
-          baseline_loaders = splitmnist_task_loaders()[0]
-          loaders = splitmnist_task_loaders()
+          baseline_loaders = splitmnist_task_loaders(params.batch_size)[0]
+          loaders = splitmnist_task_loaders(params.batch_size)
         else:
           loaders, baseline_loaders = None, None
 
