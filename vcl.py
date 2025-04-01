@@ -436,11 +436,11 @@ class Ddm(nn.Module):
     )
 
   def update_prior(self):
-    def update_layer(l):
-      l.prior_mu_w = l.mu_w.clone().detach()
-      l.prior_sigma_w = torch.exp(l.log_sigma_w.clone().detach())
-      l.prior_mu_b = l.mu_b.clone().detach()
-      l.prior_sigma_b = torch.exp(l.log_sigma_b.clone().detach())
+    def update_layer(lr):
+      lr.prior_mu_w = lr.mu_w.clone().detach()
+      lr.prior_sigma_w = torch.exp(lr.log_sigma_w.clone().detach())
+      lr.prior_mu_b = lr.mu_b.clone().detach()
+      lr.prior_sigma_b = torch.exp(lr.log_sigma_b.clone().detach())
 
     for bl in self.shared:
       if isinstance(bl, BayesianLinear):
@@ -449,11 +449,11 @@ class Ddm(nn.Module):
       update_layer(head)
 
   def restore_from_prior(self):
-    def restore_layer(l):
-      l.mu_w.data = l.prior_mu_w.clone().detach()
-      l.log_sigma_w.data = torch.log(l.prior_sigma_w.clone().detach())
-      l.mu_b.data = l.prior_mu_b.clone().detach()
-      l.log_sigma_b.data = torch.log(l.prior_sigma_b.clone().detach())
+    def restore_layer(lr):
+      lr.mu_w.data = lr.prior_mu_w.clone().detach()
+      lr.log_sigma_w.data = torch.log(lr.prior_sigma_w.clone().detach())
+      lr.mu_b.data = lr.prior_mu_b.clone().detach()
+      lr.log_sigma_b.data = torch.log(lr.prior_sigma_b.clone().detach())
 
     for bl in self.shared:
       if isinstance(bl, BayesianLinear):
