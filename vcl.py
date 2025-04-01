@@ -56,22 +56,21 @@ def transform(mean, std):
 
 def mean_std_image_dataset(dataset: torch.utils.data.Dataset):
   dataset.transform = transform_base()
-  if hasattr(dataset, 'data') and isinstance(dataset.data, torch.Tensor):
-    t_data = torch.stack([d[0] for d in dataset])
-  if isinstance(dataset, datasets.DatasetFolder):
-    # contains (image, label) tuples
-    t_data = torch.stack([d[0] for d in dataset])
-  t_data = t_data.squeeze()
+  t_data = torch.stack([d[0] for d in dataset]).squeeze()
   assert len(t_data.shape) == 3
   return t_data.mean(dim=(0, 1, 2)).item(), t_data.std(dim=(0, 1, 2)).item()
 
 
 def pmnist_task_loaders(batch_size):
+  # 0.1307, 0.3081
+  mean_mnist, std_mnsit = mean_std_image_dataset(
+    datasets.MNIST('./data', train=True, download=True)
+  )
+
   def transform_permute(idx):
     return transforms.Compose(
       [
-        # 0.1307, 0.3081 == mean_std_image_dataset(mnist_train)
-        transform(0.1307, 0.3081),
+        transform(mean_mnist, std_mnsit),
         # nasty pytorch bug: if we try to use num_workers > 0
         # on macos, pickling this fails, and nothing seems to help
         # things I tried: using dill instead of pickle for the
@@ -150,6 +149,10 @@ def transform_label(class_a, class_b):
 
 
 def splitmnist_task_loaders(batch_size):
+  mean_mnist, std_mnsit = mean_std_image_dataset(
+    datasets.MNIST('./data', train=True, download=True)
+  )
+
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
 
   # 5 classification tasks
@@ -158,14 +161,14 @@ def splitmnist_task_loaders(batch_size):
       './data',
       train=True,
       download=True,
-      transform=transform(0.1307, 0.3081),
+      transform=transform(mean_mnist, std_mnsit),
       target_transform=transform_label(a, b),
     )
     test_ds = datasets.MNIST(
       './data',
       train=False,
       download=True,
-      transform=transform(0.1307, 0.3081),
+      transform=transform(mean_mnist, std_mnsit),
       target_transform=transform_label(a, b),
     )
     # only include the two digits for this task
@@ -198,11 +201,16 @@ def splitmnist_task_loaders(batch_size):
 
 
 def notmnist_task_loaders(batch_size):
+  # 0.4229, 0.4573
+  mean_notmnist_small, std_notmnist_small = mean_std_image_dataset(
+    notmnist_data=datasets.ImageFolder('./data/notMNIST_small')
+  )
+
   train_part = 0.8
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
-  # 0.4229, 0.4573 == mean_std_image_dataset(notMNIST_small)
   notmnist_data = datasets.ImageFolder(
-    './data/notMNIST_small', transform=transform(0.4229, 0.4573)
+    './data/notMNIST_small',
+    transform=transform(mean_notmnist_small, std_notmnist_small),
   )
   notmnist_data_targets = torch.tensor(notmnist_data.targets)
   train_subset, test_subset = torch.utils.data.random_split(
