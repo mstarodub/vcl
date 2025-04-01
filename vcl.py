@@ -203,7 +203,7 @@ def splitmnist_task_loaders(batch_size):
 def notmnist_task_loaders(batch_size):
   # 0.4229, 0.4573
   mean_notmnist_small, std_notmnist_small = mean_std_image_dataset(
-    notmnist_data=datasets.ImageFolder('./data/notMNIST_small')
+    datasets.ImageFolder('./data/notMNIST_small')
   )
 
   train_part = 0.8
@@ -321,21 +321,19 @@ class Net(nn.Module):
 
 
 class BayesianLinear(nn.Module):
-  def __init__(self, in_dim, out_dim, init_std, init_w=None, init_b=None):
+  def __init__(self, in_dim, out_dim, init_std):
     super().__init__()
     self.in_dim = in_dim
     self.out_dim = out_dim
 
     # posteriors
-    if init_w is None:
-      init_w = torch.empty(out_dim, in_dim)
-      # torch.nn.init.kaiming_normal_(init_w, mode='fan_in', nonlinearity='relu')
-      torch.nn.init.normal_(init_w, mean=0, std=0.1)
+    init_w = torch.empty(out_dim, in_dim)
+    # torch.nn.init.kaiming_normal_(init_w, mode='fan_in', nonlinearity='relu')
+    torch.nn.init.normal_(init_w, mean=0, std=0.1)
     self.mu_w = nn.Parameter(init_w)
-    if init_b is None:
-      # init_b = torch.zeros(out_dim)
-      init_b = torch.empty(out_dim)
-      torch.nn.init.normal_(init_b, mean=0, std=0.1)
+    # init_b = torch.zeros(out_dim)
+    init_b = torch.empty(out_dim)
+    torch.nn.init.normal_(init_b, mean=0, std=0.1)
     self.mu_b = nn.Parameter(init_b)
     # self.log_sigma_w = nn.Parameter(torch.log(init_std * torch.ones(out_dim, in_dim)))
     init_sig_w = torch.empty(out_dim, in_dim)
@@ -371,9 +369,10 @@ class Ddm(nn.Module):
     in_dim,
     hidden_dim,
     out_dim,
+    hidden_layers,
     ntasks,
-    batch_size=256,
-    layer_init_std=1e-3,
+    batch_size,
+    layer_init_std,
     per_task_opt=True,
     bayesian_test_samples=1,
     bayesian_train_samples=1,
@@ -390,84 +389,52 @@ class Ddm(nn.Module):
     self.bayesian_train_samples = bayesian_train_samples
     self.coreset_size = coreset_size
     self.multihead = multihead
-    self.shared = (
-      nn.Sequential(
-        BayesianLinear(
-          in_dim,
-          hidden_dim,
-          layer_init_std,
-          init_w=mle.linear[0].weight if mle else None,
-          init_b=mle.linear[0].bias if mle else None,
-        ),
-        nn.ReLU(),
-        BayesianLinear(
-          hidden_dim,
-          hidden_dim,
-          layer_init_std,
-          init_w=mle.linear[2].weight if mle else None,
-          init_b=mle.linear[2].bias if mle else None,
-        ),
-        nn.ReLU(),
-        BayesianLinear(
-          hidden_dim,
-          out_dim,
-          layer_init_std,
-          init_w=mle.linear[4].weight if mle else None,
-          init_b=mle.linear[4].bias if mle else None,
-        ),
-      )
-      if not multihead
-      else nn.Sequential(
-        BayesianLinear(
-          in_dim,
-          hidden_dim,
-          layer_init_std,
-          init_w=mle.linear[0].weight if mle else None,
-          init_b=mle.linear[0].bias if mle else None,
-        ),
-        nn.ReLU(),
-        BayesianLinear(
-          hidden_dim,
-          hidden_dim,
-          layer_init_std,
-          init_w=mle.linear[2].weight if mle else None,
-          init_b=mle.linear[2].bias if mle else None,
-        ),
-        nn.ReLU(),
-      )
-    )
+
+    self.shared = nn.Sequential()
+    self.shared.append(BayesianLinear(in_dim, hidden_dim, layer_init_std))
+    self.shared.append(nn.ReLU())
+    for _ in range(hidden_layers - 1):
+      self.shared.append(BayesianLinear(hidden_dim, hidden_dim, layer_init_std))
+      self.shared.append(nn.ReLU())
+
     self.heads = nn.ModuleList(
       [
-        BayesianLinear(hidden_dim, out_dim, layer_init_std, init_w=None, init_b=None)
-        for _ in range(ntasks)
+        BayesianLinear(hidden_dim, out_dim, layer_init_std)
+        for _ in range(ntasks if self.multihead else 1)
       ]
     )
 
-  def update_prior(self):
-    def update_layer(lr):
-      lr.prior_mu_w = lr.mu_w.clone().detach()
-      lr.prior_sigma_w = torch.exp(lr.log_sigma_w.clone().detach())
-      lr.prior_mu_b = lr.mu_b.clone().detach()
-      lr.prior_sigma_b = torch.exp(lr.log_sigma_b.clone().detach())
+    if mle:
+      self.init_from_mle(mle)
 
-    for bl in self.shared:
-      if isinstance(bl, BayesianLinear):
-        update_layer(bl)
-    for head in self.heads:
-      update_layer(head)
+  def init_from_mle(self, mle):
+    for i, layer in enumerate(self.shared):
+      if isinstance(layer, BayesianLinear):
+        layer.mu_w.data = mle.linear[i].weight.clone().detach()
+        layer.mu_b.data = mle.linear[i].bias.clone().detach()
+    if not self.multihead:
+      self.heads[0].mu_w.data = mle.linear[-1].weight.clone().detach()
+      self.heads[0].mu_b.data = mle.linear[-1].bias.clone().detach()
+
+  @property
+  def bayesian_layers(self):
+    return [layer for layer in self.shared if isinstance(layer, BayesianLinear)] + list(
+      self.heads
+    )
+
+  def update_prior(self):
+    for layer in self.bayesian_layers:
+      layer.prior_mu_w = layer.mu_w.clone().detach()
+      layer.prior_sigma_w = torch.exp(layer.log_sigma_w.clone().detach())
+      layer.prior_mu_b = layer.mu_b.clone().detach()
+      layer.prior_sigma_b = torch.exp(layer.log_sigma_b.clone().detach())
 
   def restore_from_prior(self):
-    def restore_layer(lr):
-      lr.mu_w.data = lr.prior_mu_w.clone().detach()
-      lr.log_sigma_w.data = torch.log(lr.prior_sigma_w.clone().detach())
-      lr.mu_b.data = lr.prior_mu_b.clone().detach()
-      lr.log_sigma_b.data = torch.log(lr.prior_sigma_b.clone().detach())
-
-    for bl in self.shared:
-      if isinstance(bl, BayesianLinear):
-        restore_layer(bl)
-    for head in self.heads:
-      restore_layer(head)
+    for layer in self.bayesian_layers:
+      layer.mu_w.data = layer.prior_mu_w.clone().detach()
+      layer.log_sigma_w.data = torch.log(layer.prior_sigma_w.clone().detach())
+      layer.mu_b.data = layer.prior_mu_b.clone().detach()
+      layer.log_sigma_b.data = torch.log(layer.prior_sigma_b.clone().detach())
 
   @staticmethod
   def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
@@ -478,31 +445,15 @@ class Ddm(nn.Module):
     )
 
   def compute_kl(self):
-    res = 0
-    for bl in self.shared:
-      if isinstance(bl, BayesianLinear):
-        res += self.kl_div_gaussians(
-          bl.mu_w, torch.exp(bl.log_sigma_w), bl.prior_mu_w, bl.prior_sigma_w
-        )
-        res += self.kl_div_gaussians(
-          bl.mu_b, torch.exp(bl.log_sigma_b), bl.prior_mu_b, bl.prior_sigma_b
-        )
+    def kl_layer(layer):
+      return self.kl_div_gaussians(
+        layer.mu_w, torch.exp(layer.log_sigma_w), layer.prior_mu_w, layer.prior_sigma_w
+      ) + self.kl_div_gaussians(
+        layer.mu_b, torch.exp(layer.log_sigma_b), layer.prior_mu_b, layer.prior_sigma_b
+      )
+
     # notice that the gradients of the unused heads are zeroed and hence the KL terms are zero too
-    if self.multihead:
-      for head in self.heads:
-        res += self.kl_div_gaussians(
-          head.mu_w,
-          torch.exp(head.log_sigma_w),
-          head.prior_mu_w,
-          head.prior_sigma_w,
-        )
-        res += self.kl_div_gaussians(
-          head.mu_b,
-          torch.exp(head.log_sigma_b),
-          head.prior_mu_b,
-          head.prior_sigma_b,
-        )
-    return res
+    return sum(kl_layer(layer) for layer in self.bayesian_layers)
 
   def forward(self, x, task=None):
     x = self.shared(x)
@@ -510,10 +461,12 @@ class Ddm(nn.Module):
       batch_size, out_dim = x.shape[0], self.heads[0].out_dim
       output = torch.zeros(batch_size, out_dim, device=x.device, dtype=x.dtype)
       for head_idx, head in enumerate(self.heads):
+        mask = task == head_idx
         # (batch_size, out_dim) * (batch_size, 1)
-        output += head(x) * (task == head_idx).unsqueeze(1)
+        output += head(x) * mask.unsqueeze(1)
       return output
-    return x
+    else:
+      return self.heads[0](x)
 
   # returns the first component of L_SGVB, without the N factor
   @staticmethod
@@ -526,6 +479,21 @@ class Ddm(nn.Module):
     # we use reduction=mean (the default) to get the 1/M factor and the outer sum,
     # and finally arrive at eq (3) without the N factor
     return -F.cross_entropy(pred, target)
+
+  def wandb_log_tensors(self):
+    for bli, bl in enumerate(self.shared):
+      if isinstance(bl, BayesianLinear):
+        wandb.log(
+          {
+            f's_{bli}_sigma_w': torch.std(torch.exp(bl.log_sigma_w)).detach().item(),
+          }
+        )
+    for hli, hl in enumerate(self.heads):
+      wandb.log(
+        {
+          f'h_{hli}_sigma_w': torch.std(torch.exp(hl.log_sigma_w)).detach().item(),
+        }
+      )
 
   def train_epoch(self, loader, opt, task, epoch):
     device = torch_device()
@@ -543,14 +511,7 @@ class Ddm(nn.Module):
       loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
       if batch % self.logging_every == 0:
         wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
-        # log tensors
-        for bli, bl in enumerate(self.shared):
-          if isinstance(bl, BayesianLinear):
-            wandb.log(
-              {
-                f'{bli}_sigma_w': torch.std(torch.exp(bl.log_sigma_w)).detach().item(),
-              }
-            )
+        self.wandb_log_tensors()
       loss.backward()
       opt.step()
 
@@ -704,7 +665,11 @@ def model_pipeline(params, wandb_log=True):
     elif params.problem == 'smnist':
       baseline_loaders = splitmnist_task_loaders(params.batch_size)[0]
       loaders = splitmnist_task_loaders(params.batch_size)
+    elif params.problem == 'nmnist':
+      baseline_loaders = notmnist_task_loaders(params.batch_size)[0]
+      loaders = notmnist_task_loaders(params.batch_size)
     else:
+      print('invalid problem selected')
       loaders, baseline_loaders = None, None
 
     if params.pretrain_epochs > 0:
@@ -717,9 +682,10 @@ def model_pipeline(params, wandb_log=True):
       mle = None
 
     model = Ddm(
-      params.in_dim,
-      params.hidden_dim,
-      params.out_dim,
+      in_dim=params.in_dim,
+      hidden_dim=params.hidden_dim,
+      out_dim=params.out_dim,
+      hidden_layers=params.hidden_layers,
       ntasks=params.ntasks,
       batch_size=params.batch_size,
       layer_init_std=params.layer_init_std,
@@ -727,8 +693,8 @@ def model_pipeline(params, wandb_log=True):
       bayesian_test_samples=params.bayesian_test_samples,
       bayesian_train_samples=params.bayesian_train_samples,
       coreset_size=params.coreset_size,
-      multihead=params.multihead,
       mle=mle,
+      multihead=params.multihead,
     ).to(torch_device())
     # we have lots of dynamic control flow. not sure about this
     # model = torch.compile(model)
@@ -795,7 +761,7 @@ if __name__ == '__main__':
     hidden_layers=4,
     ntasks=5,
     epochs=120,
-    batch_size=512,
+    batch_size=None,
     pretrain_epochs=0,
     coreset_size=0,
     per_task_opt=False,
@@ -809,3 +775,4 @@ if __name__ == '__main__':
 
   # model = model_pipeline(ddm_pmnist_run)
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
+  model = model_pipeline(ddm_nmnist_run, wandb_log=True)
