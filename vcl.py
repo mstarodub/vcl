@@ -8,6 +8,7 @@ from tqdm.auto import tqdm, trange
 import matplotlib.pyplot as plt
 import wandb
 from typing import Optional, List, Set, Any
+from copy import copy
 
 
 def torch_device(enable_mps=False, enable_cuda=True):
@@ -27,18 +28,26 @@ def seed(seed=0):
   # torch.use_deterministic_algorithms(True)
 
 
-def transform(mean, std):
+def transform_base():
   return transforms.Compose(
     [
-      # no-op for mnist
+      # no-op for mnist, but relevant for ImageFolder datasets
       transforms.ToImage(),
-      transforms.Grayscale(),
-      transforms.ToDtype(torch.float32, scale=True),
       # the ImageFolder PIL loader converts pngs to rgb. greyscale ones
       # get their channel duplicated into three identical channels
       # transforms.Grayscale(num_output_channels=1) then applies a weighted
       # average because e.g. green is more important in true colour images.
       # so in the end we get the original channel value back
+      transforms.Grayscale(),
+      transforms.ToDtype(torch.float32, scale=True),
+    ]
+  )
+
+
+def transform(mean, std):
+  return transforms.Compose(
+    [
+      transform_base(),
       transforms.Normalize(mean=[mean], std=[std]),
       transforms.Lambda(torch.flatten),
     ]
@@ -46,10 +55,15 @@ def transform(mean, std):
 
 
 def mean_std_image_dataset(dataset: torch.utils.data.Dataset):
-  assert isinstance(dataset.data, torch.Tensor)
-  t_data = dataset.data.to(torch.float32)
+  dataset.transform = transform_base()
+  if hasattr(dataset, 'data') and isinstance(dataset.data, torch.Tensor):
+    t_data = torch.stack([d[0] for d in dataset])
+  if isinstance(dataset, datasets.DatasetFolder):
+    # contains (image, label) tuples
+    t_data = torch.stack([d[0] for d in dataset])
+  t_data = t_data.squeeze()
   assert len(t_data.shape) == 3
-  return t_data.mean(dim=(0, 1, 2)) / 255, t_data.std(dim=(0, 1, 2)) / 255
+  return t_data.mean(dim=(0, 1, 2)).item(), t_data.std(dim=(0, 1, 2)).item()
 
 
 def pmnist_task_loaders(batch_size):
@@ -125,16 +139,18 @@ def collate_add_task(task):
   return collate_fn
 
 
+# need to change the loss for this - extension
+def transform_onehot(class_a, class_b):
+  one_hot = {class_a: torch.tensor([1.0, 0.0]), class_b: torch.tensor([0.0, 1.0])}
+  return lambda x: one_hot[int(x)]
+
+
+def transform_label(class_a, class_b):
+  return lambda x: torch.tensor(0 if x == class_a else 1)
+
+
 def splitmnist_task_loaders(batch_size):
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
-
-  # need to change the loss for this - extension
-  def transform_onehot(class_a, class_b):
-    one_hot = {class_a: torch.tensor([1.0, 0.0]), class_b: torch.tensor([0.0, 1.0])}
-    return lambda x: one_hot[int(x)]
-
-  def transform_label(class_a, class_b):
-    return lambda x: torch.tensor(0 if x == class_a else 1)
 
   # 5 classification tasks
   for task, (a, b) in enumerate([(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]):
@@ -142,14 +158,14 @@ def splitmnist_task_loaders(batch_size):
       './data',
       train=True,
       download=True,
-      transform=transform(),
+      transform=transform(0.1307, 0.3081),
       target_transform=transform_label(a, b),
     )
     test_ds = datasets.MNIST(
       './data',
       train=False,
       download=True,
-      transform=transform(),
+      transform=transform(0.1307, 0.3081),
       target_transform=transform_label(a, b),
     )
     # only include the two digits for this task
@@ -177,13 +193,66 @@ def splitmnist_task_loaders(batch_size):
       )
     )
     loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
+
   return loaders
 
 
 def notmnist_task_loaders(batch_size):
+  train_part = 0.8
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
-  notmnist_data = datasets.ImageFolder('./data/notMNIST_small')
-  return notmnist_data
+  # 0.4229, 0.4573 == mean_std_image_dataset(notMNIST_small)
+  notmnist_data = datasets.ImageFolder(
+    './data/notMNIST_small', transform=transform(0.4229, 0.4573)
+  )
+  notmnist_data_targets = torch.tensor(notmnist_data.targets)
+  train_subset, test_subset = torch.utils.data.random_split(
+    notmnist_data, [train_part, 1 - train_part]
+  )
+  train_idx_full = torch.tensor(train_subset.indices)
+  train_targets = notmnist_data_targets[train_idx_full]
+  test_idx_full = torch.tensor(test_subset.indices)
+  test_targets = notmnist_data_targets[test_idx_full]
+
+  # 5 classification tasks:
+  # (A,B), (C,D), (E,F), (G,H), (I,J) -> (0,1), (2,3), (4,5), (6,7), (8,9)
+  for task, (a, b) in enumerate([(0, 1), (2, 3), (4, 5), (6, 7), (8, 9)]):
+    train_mask = (train_targets == a) | (train_targets == b)
+    test_mask = (test_targets == a) | (test_targets == b)
+    train_idx_sub = torch.nonzero(train_mask).squeeze()
+    test_idx_sub = torch.nonzero(test_mask).squeeze()
+
+    # map indicies back to original
+    train_idx = train_idx_full[train_idx_sub]
+    test_idx = test_idx_full[test_idx_sub]
+
+    # shallow copy to un-share the target_transform, sharing the underlying data
+    train_ds = copy(notmnist_data)
+    train_ds.target_transform = transform_label(a, b)
+    test_ds = copy(notmnist_data)
+    test_ds.target_transform = transform_label(a, b)
+
+    collate_fn = collate_add_task(task)
+    cumulative_train_loaders.append(
+      torch.utils.data.DataLoader(
+        torch.utils.data.Subset(train_ds, train_idx),
+        batch_size=batch_size if batch_size else max(1, len(train_idx)),
+        shuffle=True,
+        num_workers=12 if torch.cuda.is_available() else 0,
+        collate_fn=collate_fn,
+      )
+    )
+    cumulative_test_loaders.append(
+      torch.utils.data.DataLoader(
+        torch.utils.data.Subset(test_ds, test_idx),
+        batch_size=batch_size if batch_size else max(1, len(test_idx)),
+        shuffle=True,
+        num_workers=12 if torch.cuda.is_available() else 0,
+        collate_fn=collate_fn,
+      )
+    )
+    loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
+
+  return loaders
 
 
 class Net(nn.Module):
@@ -731,5 +800,4 @@ if __name__ == '__main__':
   )
 
   # model = model_pipeline(ddm_pmnist_run)
-  notmnist_task_loaders(None)
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
