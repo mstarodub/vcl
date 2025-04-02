@@ -61,16 +61,48 @@ def mean_std_image_dataset(dataset: torch.utils.data.Dataset):
   return t_data.mean(dim=(0, 1, 2)).item(), t_data.std(dim=(0, 1, 2)).item()
 
 
+def mnist_task_loaders(batch_size):
+  mean_mnist, std_mnist = mean_std_image_dataset(
+    datasets.MNIST('./data', train=True, download=True)
+  )
+  data_train = datasets.MNIST(
+    './data',
+    train=True,
+    download=True,
+    transform=transform(mean_mnist, std_mnist),
+    target_transform=torch.tensor,
+  )
+  data_test = datasets.MNIST(
+    './data',
+    train=False,
+    download=True,
+    transform=transform(mean_mnist, std_mnist),
+    target_transform=torch.tensor,
+  )
+  train_loader = torch.utils.data.DataLoader(
+    data_train,
+    batch_size=batch_size if batch_size else max(1, len(data_train)),
+    shuffle=True,
+    num_workers=12 if torch.cuda.is_available() else 0,
+  )
+  test_loader = torch.utils.data.DataLoader(
+    data_test,
+    batch_size=batch_size if batch_size else max(1, len(data_test)),
+    num_workers=12 if torch.cuda.is_available() else 0,
+  )
+  return train_loader, test_loader
+
+
 def pmnist_task_loaders(batch_size):
   # 0.1307, 0.3081
-  mean_mnist, std_mnsit = mean_std_image_dataset(
+  mean_mnist, std_mnist = mean_std_image_dataset(
     datasets.MNIST('./data', train=True, download=True)
   )
 
   def transform_permute(idx):
     return transforms.Compose(
       [
-        transform(mean_mnist, std_mnsit),
+        transform(mean_mnist, std_mnist),
         # nasty pytorch bug: if we try to use num_workers > 0
         # on macos, pickling this fails, and nothing seems to help
         # things I tried: using dill instead of pickle for the
@@ -149,7 +181,7 @@ def transform_label(class_a, class_b):
 
 
 def splitmnist_task_loaders(batch_size):
-  mean_mnist, std_mnsit = mean_std_image_dataset(
+  mean_mnist, std_mnist = mean_std_image_dataset(
     datasets.MNIST('./data', train=True, download=True)
   )
 
@@ -161,14 +193,14 @@ def splitmnist_task_loaders(batch_size):
       './data',
       train=True,
       download=True,
-      transform=transform(mean_mnist, std_mnsit),
+      transform=transform(mean_mnist, std_mnist),
       target_transform=transform_label(a, b),
     )
     test_ds = datasets.MNIST(
       './data',
       train=False,
       download=True,
-      transform=transform(mean_mnist, std_mnsit),
+      transform=transform(mean_mnist, std_mnist),
       target_transform=transform_label(a, b),
     )
     # only include the two digits for this task
@@ -299,7 +331,7 @@ class DNet(nn.Module):
       accuracies.append(acc.item())
     return np.mean(losses), np.mean(accuracies)
 
-  def train_run(self, train_loader, test_loader, num_epochs=100):
+  def train_run(self, train_loader, test_loader, num_epochs):
     loss_fn = F.cross_entropy
     opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
     for i in trange(num_epochs, desc='pretrain'):
@@ -591,7 +623,7 @@ class Ddm(nn.Module):
       num_workers=12 if torch.cuda.is_available() else 0,
     )
 
-  def train_test_run(self, tasks, num_epochs=100):
+  def train_test_run(self, tasks, num_epochs):
     self.train()
     opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
     wandb.watch(self, log_freq=100)
@@ -656,6 +688,113 @@ class Ddm(nn.Module):
     wandb.log({'task': task, 'test_acc': np.mean(avg_accuracies)})
 
 
+class Vae(nn.Module):
+  def __init__(
+    self,
+    in_dim,
+    hidden_dim,
+    latent_dim,
+    learning_rate,
+  ):
+    super().__init__()
+    self.learning_rate = learning_rate
+    self.latent_dim = latent_dim
+    self.encoder = nn.Sequential(
+      nn.Linear(in_dim, hidden_dim),
+      nn.ReLU(),
+      nn.Linear(hidden_dim, 2 * latent_dim),
+    )
+    self.decoder = nn.Sequential(
+      nn.Linear(latent_dim, hidden_dim),
+      nn.ReLU(),
+      nn.Linear(hidden_dim, in_dim),
+    )
+
+  def forward(self, x):
+    out = self.encoder(x)
+    mu, log_sigma = out[:, : self.latent_dim], out[:, self.latent_dim :]
+    eps = torch.randn_like(mu)
+    z = mu + torch.exp(log_sigma) * eps
+    return self.decoder(z), mu, log_sigma
+
+  def elbo(self, mu, log_sigma, gen, orig):
+    reconstr_likelihood = -F.mse_loss(gen, orig, reduction='sum')
+    # kl_div_gaussians, but (mu_2, sigma_2) == (0, 1)
+    kl_loss = -0.5 * torch.sum(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
+    return reconstr_likelihood - kl_loss
+
+  def train_epoch(self, loader, opt):
+    device = torch_device()
+    self.train()
+    losses, accuracies = [], []
+    for batch_data in loader:
+      data, target = batch_data[0], batch_data[1]
+      data, target = data.to(device), target.to(device)
+      opt.zero_grad()
+      gen, mu, log_sigma = self(data)
+      loss = -self.elbo(mu, log_sigma, gen, data)
+      acc = self.classifier_certainty(gen, target)
+      loss.backward()
+      opt.step()
+      losses.append(loss.item())
+      accuracies.append(acc.item())
+    return np.mean(losses), np.mean(accuracies)
+
+  @torch.no_grad()
+  def test_run(self, loader):
+    device = torch_device()
+    self.eval()
+    losses, accuracies = [], []
+    for batch_data in loader:
+      data, target = batch_data[0], batch_data[1]
+      data, target = data.to(device), target.to(device)
+      gen, mu, log_sigma = self(data)
+      loss = -self.elbo(mu, log_sigma, gen, data)
+      acc = self.classifier_certainty(gen, target)
+      losses.append(loss.item())
+      accuracies.append(acc.item())
+    return np.mean(losses), np.mean(accuracies)
+
+  def train_run(self, train_loader, test_loader, num_epochs):
+    opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+    for epoch in range(num_epochs):
+      train_loss, train_acc = self.train_epoch(train_loader, opt)
+      test_loss, test_acc = self.test_run(test_loader)
+      print(f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f}')
+
+  def classifier_certainty(self, gen, target):
+    return torch.tensor(0)
+
+  @torch.no_grad()
+  def sample(self):
+    self.eval()
+    z = torch.randn(1, self.latent_dim)
+    return self.decoder(z)
+
+
+def plot_samples(model):
+  axes = plt.subplots(1, 10, figsize=(10, 1))[1]
+  for i in range(10):
+    sample = model.sample().reshape(28, 28)
+    axes[i].imshow(sample, cmap='gray')
+    axes[i].axis('off')
+  plt.show()
+
+
+@torch.no_grad()
+def plot_reconstructions(model, loader):
+  model.eval()
+  data, _ = next(iter(loader))
+  data = data[:10]
+  recon, _, _ = model(data)
+  axes = plt.subplots(2, 10, figsize=(10, 2))[1]
+  for i in range(10):
+    axes[0, i].imshow(data[i].reshape(28, 28), cmap='gray')
+    axes[0, i].axis('off')
+    axes[1, i].imshow(recon[i].reshape(28, 28), cmap='gray')
+    axes[1, i].axis('off')
+
+
 def accuracy(pred, target):
   # undo one-hot encoding, if applicable
   target_idx = target.argmax(dim=1) if target.ndim == pred.ndim else target
@@ -689,7 +828,9 @@ def discr_model_pipeline(params, wandb_log=True):
       ).to(torch_device())
       mle = torch.compile(mle)
       mle.train_run(
-        baseline_loaders[0][0], baseline_loaders[1][0], params.pretrain_epochs
+        baseline_loaders[0][0],
+        baseline_loaders[1][0],
+        num_epochs=params.pretrain_epochs,
       )
     else:
       mle = None
@@ -791,4 +932,10 @@ if __name__ == '__main__':
 
   # model = discr_model_pipeline(ddm_pmnist_run, wandb_log=True)
   # model = discr_model_pipeline(ddm_smnist_run, wandb_log=True)
-  model = discr_model_pipeline(ddm_nmnist_run, wandb_log=True)
+  # model = discr_model_pipeline(ddm_nmnist_run, wandb_log=True)
+
+  model = Vae(28 * 28, 500, 50, 1e-4).to(torch_device())
+  train_loader, test_loader = mnist_task_loaders(256)
+  model.train_run(train_loader, test_loader, num_epochs=200)
+  plot_reconstructions(model, test_loader)
+  plot_samples(model)
