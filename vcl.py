@@ -263,16 +263,21 @@ def notmnist_task_loaders(batch_size):
   return loaders
 
 
-class Net(nn.Module):
-  def __init__(self, in_dim, hidden_dim, out_dim):
+class DNet(nn.Module):
+  def __init__(self, in_dim, hidden_dim, out_dim, hidden_layers, learning_rate):
     super().__init__()
-    self.linear = nn.Sequential(
-      nn.Linear(in_dim, hidden_dim),
-      nn.ReLU(),
-      nn.Linear(hidden_dim, hidden_dim),
-      nn.ReLU(),
-      nn.Linear(hidden_dim, out_dim),
-    )
+    self.linear = nn.Sequential()
+    # first hidden layer
+    self.linear.append(nn.Linear(in_dim, hidden_dim))
+    self.linear.append(nn.ReLU())
+    # remaining hidden layers
+    for _ in range(hidden_layers - 1):
+      self.linear.append(nn.Linear(hidden_dim, hidden_dim))
+      self.linear.append(nn.ReLU())
+    # output layer
+    self.linear.append(nn.Linear(hidden_dim, out_dim))
+
+    self.learning_rate = learning_rate
 
   def forward(self, x):
     return self.linear(x)
@@ -296,7 +301,7 @@ class Net(nn.Module):
 
   def train_run(self, train_loader, test_loader, num_epochs=100):
     loss_fn = F.cross_entropy
-    opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+    opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
     for i in trange(num_epochs, desc='pretrain'):
       train_loss, train_acc = self.train_epoch(train_loader, loss_fn, opt)
       test_loss, test_acc = self.test_run(test_loader, loss_fn)
@@ -373,6 +378,7 @@ class Ddm(nn.Module):
     ntasks,
     batch_size,
     layer_init_std,
+    learning_rate,
     per_task_opt=True,
     bayesian_test_samples=1,
     bayesian_train_samples=1,
@@ -384,6 +390,7 @@ class Ddm(nn.Module):
     super().__init__()
     self.logging_every = logging_every
     self.batch_size = batch_size
+    self.learning_rate = learning_rate
     self.per_task_opt = per_task_opt
     self.bayesian_test_samples = bayesian_test_samples
     self.bayesian_train_samples = bayesian_train_samples
@@ -586,7 +593,7 @@ class Ddm(nn.Module):
 
   def train_test_run(self, tasks, num_epochs=100):
     self.train()
-    opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+    opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
     wandb.watch(self, log_freq=100)
     old_coreset_idx = []
     for task, (train_loaders, test_loaders) in enumerate(tasks):
@@ -599,7 +606,7 @@ class Ddm(nn.Module):
       old_coreset_idx = coreset_idx
 
       if self.per_task_opt:
-        opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+        opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
       # restore network parameters to \tilde{q}_{t}
       if task > 0:
@@ -655,7 +662,7 @@ def accuracy(pred, target):
   return (pred.argmax(dim=1) == target_idx).float().mean()
 
 
-def model_pipeline(params, wandb_log=True):
+def discr_model_pipeline(params, wandb_log=True):
   wandb_mode = 'online' if wandb_log else 'disabled'
   with wandb.init(project='vcl', config=params, mode=wandb_mode):
     params = wandb.config
@@ -673,7 +680,13 @@ def model_pipeline(params, wandb_log=True):
       loaders, baseline_loaders = None, None
 
     if params.pretrain_epochs > 0:
-      mle = Net(params.in_dim, params.hidden_dim, params.out_dim).to(torch_device())
+      mle = DNet(
+        in_dim=params.in_dim,
+        hidden_dim=params.hidden_dim,
+        out_dim=params.out_dim,
+        hidden_layers=params.hidden_layers,
+        learning_rate=params.learning_rate,
+      ).to(torch_device())
       mle = torch.compile(mle)
       mle.train_run(
         baseline_loaders[0][0], baseline_loaders[1][0], params.pretrain_epochs
@@ -693,6 +706,7 @@ def model_pipeline(params, wandb_log=True):
       bayesian_test_samples=params.bayesian_test_samples,
       bayesian_train_samples=params.bayesian_train_samples,
       coreset_size=params.coreset_size,
+      learning_rate=params.learning_rate,
       mle=mle,
       multihead=params.multihead,
     ).to(torch_device())
@@ -704,7 +718,6 @@ def model_pipeline(params, wandb_log=True):
 
 if __name__ == '__main__':
   wandb.login()
-
   print(
     'torch version',
     torch.__version__,
@@ -722,13 +735,14 @@ if __name__ == '__main__':
     epochs=100,
     batch_size=256,
     # 0
-    pretrain_epochs=0,
+    pretrain_epochs=10,
     # 2000
     coreset_size=0,
     per_task_opt=False,
     layer_init_std=1e-10,
     bayesian_test_samples=100,
     bayesian_train_samples=10,
+    learning_rate=1e-3,
     multihead=False,
     problem='pmnist',
     model='vcl',
@@ -749,6 +763,7 @@ if __name__ == '__main__':
     layer_init_std=1e-3,
     bayesian_test_samples=100,
     bayesian_train_samples=10,
+    learning_rate=1e-3,
     multihead=True,
     problem='smnist',
     model='vcl',
@@ -768,11 +783,12 @@ if __name__ == '__main__':
     layer_init_std=1e-3,
     bayesian_test_samples=100,
     bayesian_train_samples=10,
+    learning_rate=1e-3,
     multihead=True,
     problem='nmnist',
     model='vcl',
   )
 
-  # model = model_pipeline(ddm_pmnist_run)
-  # model = model_pipeline(ddm_smnist_run, wandb_log=True)
-  model = model_pipeline(ddm_nmnist_run, wandb_log=True)
+  # model = discr_model_pipeline(ddm_pmnist_run, wandb_log=True)
+  # model = discr_model_pipeline(ddm_smnist_run, wandb_log=True)
+  model = discr_model_pipeline(ddm_nmnist_run, wandb_log=True)
