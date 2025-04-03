@@ -801,10 +801,14 @@ class Vae(nn.Module):
     self.encoder = nn.Sequential(
       nn.Linear(in_dim, hidden_dim),
       nn.ReLU(),
+      nn.Linear(hidden_dim, hidden_dim),
+      nn.ReLU(),
       nn.Linear(hidden_dim, 2 * latent_dim),
     )
     self.decoder = nn.Sequential(
       nn.Linear(latent_dim, hidden_dim),
+      nn.ReLU(),
+      nn.Linear(hidden_dim, hidden_dim),
       nn.ReLU(),
       nn.Linear(hidden_dim, in_dim),
       nn.Sigmoid(),
