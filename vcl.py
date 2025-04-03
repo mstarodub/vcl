@@ -548,7 +548,7 @@ class Ddm(nn.Module):
       acc = accuracy(mean_pred, target)
       losses = torch.stack([self.sgvb_mc(pred, target) for pred in preds])
       loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
-      if batch % self.logging_every == 0:
+      if batch % self.logging_every == 0 and batch_data.shape[0] == self.batch_size:
         wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
         self.wandb_log_tensors()
       loss.backward()
