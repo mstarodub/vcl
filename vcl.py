@@ -61,10 +61,27 @@ def mean_std_image_dataset(dataset: torch.utils.data.Dataset):
   return t_data.mean(dim=(0, 1, 2)).item(), t_data.std(dim=(0, 1, 2)).item()
 
 
-def mnist_task_loaders(batch_size):
-  mean_mnist, std_mnist = mean_std_image_dataset(
-    datasets.MNIST('./data', train=True, download=True)
-  )
+def precomp_mnist_stats(verify=False):
+  if verify:
+    mean_mnist, std_mnist = mean_std_image_dataset(
+      datasets.MNIST('./data', train=True, download=True)
+    )
+    print(mean_mnist, std_mnist)
+  return (0.1307, 0.3081)
+
+
+def precomp_notmnist_stats(verify=False):
+  if verify:
+    mean_notmnist_small, std_notmnist_small = mean_std_image_dataset(
+      datasets.ImageFolder('./data/notMNIST_small')
+    )
+    print(mean_notmnist_small, std_notmnist_small)
+  return (0.4229, 0.4573)
+
+
+def mnist_vanilla_task_loaders(batch_size):
+  mean_mnist, std_mnist = precomp_mnist_stats()
+
   data_train = datasets.MNIST(
     './data',
     train=True,
@@ -93,11 +110,98 @@ def mnist_task_loaders(batch_size):
   return train_loader, test_loader
 
 
-def pmnist_task_loaders(batch_size):
-  # 0.1307, 0.3081
-  mean_mnist, std_mnist = mean_std_image_dataset(
-    datasets.MNIST('./data', train=True, download=True)
+def mnist_cont_task_loaders(batch_size):
+  mean_mnist, std_mnist = precomp_mnist_stats()
+
+  loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
+  train_ds = datasets.MNIST(
+    './data',
+    train=True,
+    download=True,
+    transform=transform(mean_mnist, std_mnist),
+    target_transform=torch.tensor,
   )
+  test_ds = datasets.MNIST(
+    './data',
+    train=False,
+    download=True,
+    transform=transform(mean_mnist, std_mnist),
+    target_transform=torch.tensor,
+  )
+
+  for task in range(10):
+    train_mask = train_ds.targets == task
+    test_mask = test_ds.targets == task
+    train_idx = torch.nonzero(train_mask).squeeze()
+    test_idx = torch.nonzero(test_mask).squeeze()
+    cumulative_train_loaders.append(
+      torch.utils.data.DataLoader(
+        torch.utils.data.Subset(train_ds, train_idx),
+        batch_size=batch_size if batch_size else max(1, len(train_idx)),
+        shuffle=True,
+        num_workers=12 if torch.cuda.is_available() else 0,
+      )
+    )
+    cumulative_test_loaders.append(
+      torch.utils.data.DataLoader(
+        torch.utils.data.Subset(test_ds, test_idx),
+        batch_size=batch_size if batch_size else max(1, len(test_idx)),
+        shuffle=True,
+        num_workers=12 if torch.cuda.is_available() else 0,
+      )
+    )
+    loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
+
+  return loaders
+
+
+def nmnist_cont_task_loaders(batch_size):
+  mean_notmnist_small, std_notmnist_small = precomp_notmnist_stats()
+
+  train_part = 0.8
+  loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
+  notmnist_data = datasets.ImageFolder(
+    './data/notMNIST_small',
+    transform=transform(mean_notmnist_small, std_notmnist_small),
+  )
+  notmnist_data_targets = torch.tensor(notmnist_data.targets)
+  train_subset, test_subset = torch.utils.data.random_split(
+    notmnist_data, [train_part, 1 - train_part]
+  )
+  train_idx_full = torch.tensor(train_subset.indices)
+  train_targets = notmnist_data_targets[train_idx_full]
+  test_idx_full = torch.tensor(test_subset.indices)
+  test_targets = notmnist_data_targets[test_idx_full]
+  for task in range(10):
+    train_mask = train_targets == task
+    test_mask = test_targets == task
+    train_idx_sub = torch.nonzero(train_mask).squeeze()
+    test_idx_sub = torch.nonzero(test_mask).squeeze()
+    train_idx = train_idx_full[train_idx_sub]
+    test_idx = test_idx_full[test_idx_sub]
+    cumulative_train_loaders.append(
+      torch.utils.data.DataLoader(
+        torch.utils.data.Subset(notmnist_data, train_idx),
+        batch_size=batch_size if batch_size else max(1, len(train_idx)),
+        shuffle=True,
+        num_workers=12 if torch.cuda.is_available() else 0,
+      )
+    )
+    cumulative_test_loaders.append(
+      torch.utils.data.DataLoader(
+        torch.utils.data.Subset(notmnist_data, test_idx),
+        batch_size=batch_size if batch_size else max(1, len(test_idx)),
+        shuffle=True,
+        num_workers=12 if torch.cuda.is_available() else 0,
+      )
+    )
+    loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
+
+  return loaders
+
+
+def pmnist_task_loaders(batch_size):
+  mean_mnist, std_mnist = precomp_mnist_stats()
 
   def transform_permute(idx):
     return transforms.Compose(
@@ -181,9 +285,7 @@ def transform_label(class_a, class_b):
 
 
 def splitmnist_task_loaders(batch_size):
-  mean_mnist, std_mnist = mean_std_image_dataset(
-    datasets.MNIST('./data', train=True, download=True)
-  )
+  mean_mnist, std_mnist = precomp_mnist_stats()
 
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
 
@@ -233,10 +335,7 @@ def splitmnist_task_loaders(batch_size):
 
 
 def notmnist_task_loaders(batch_size):
-  # 0.4229, 0.4573
-  mean_notmnist_small, std_notmnist_small = mean_std_image_dataset(
-    datasets.ImageFolder('./data/notMNIST_small')
-  )
+  mean_notmnist_small, std_notmnist_small = precomp_notmnist_stats()
 
   train_part = 0.8
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
@@ -772,28 +871,31 @@ class Vae(nn.Module):
     z = torch.randn(1, self.latent_dim)
     return self.decoder(z)
 
+  @torch.no_grad()
+  def plot_reconstructions(self, loader):
+    self.eval()
+    data, _ = next(iter(loader))
+    data = data[:10]
+    recon, _, _ = self(data)
+    axes = plt.subplots(2, 10, figsize=(10, 2))[1]
+    for i in range(10):
+      axes[0, i].imshow(data[i].reshape(28, 28), cmap='gray')
+      axes[0, i].axis('off')
+      axes[1, i].imshow(recon[i].reshape(28, 28), cmap='gray')
+      axes[1, i].axis('off')
 
-def plot_samples(model):
+
+class Dgm(nn.Module):
+  pass
+
+
+def plot_samples(generative_model):
   axes = plt.subplots(1, 10, figsize=(10, 1))[1]
   for i in range(10):
-    sample = model.sample().reshape(28, 28)
+    sample = generative_model.sample().reshape(28, 28)
     axes[i].imshow(sample, cmap='gray')
     axes[i].axis('off')
   plt.show()
-
-
-@torch.no_grad()
-def plot_reconstructions(model, loader):
-  model.eval()
-  data, _ = next(iter(loader))
-  data = data[:10]
-  recon, _, _ = model(data)
-  axes = plt.subplots(2, 10, figsize=(10, 2))[1]
-  for i in range(10):
-    axes[0, i].imshow(data[i].reshape(28, 28), cmap='gray')
-    axes[0, i].axis('off')
-    axes[1, i].imshow(recon[i].reshape(28, 28), cmap='gray')
-    axes[1, i].axis('off')
 
 
 def accuracy(pred, target):
@@ -802,59 +904,89 @@ def accuracy(pred, target):
   return (pred.argmax(dim=1) == target_idx).float().mean()
 
 
-def discr_model_pipeline(params, wandb_log=True):
-  wandb_mode = 'online' if wandb_log else 'disabled'
-  with wandb.init(project='vcl', config=params, mode=wandb_mode):
-    params = wandb.config
-    if params.problem == 'pmnist':
-      baseline_loaders = pmnist_task_loaders(params.batch_size)[0]
-      loaders = pmnist_task_loaders(params.batch_size)
-    elif params.problem == 'smnist':
-      baseline_loaders = splitmnist_task_loaders(params.batch_size)[0]
-      loaders = splitmnist_task_loaders(params.batch_size)
-    elif params.problem == 'nmnist':
-      baseline_loaders = notmnist_task_loaders(params.batch_size)[0]
-      loaders = notmnist_task_loaders(params.batch_size)
-    else:
-      print('invalid problem selected')
-      loaders, baseline_loaders = None, None
+def discriminative_model_pipeline(params, wandb_log=True):
+  loaders, baseline_loaders = None, None
+  if params.problem == 'pmnist':
+    baseline_loaders = pmnist_task_loaders(params.batch_size)[0]
+    loaders = pmnist_task_loaders(params.batch_size)
+  if params.problem == 'smnist':
+    baseline_loaders = splitmnist_task_loaders(params.batch_size)[0]
+    loaders = splitmnist_task_loaders(params.batch_size)
+  if params.problem == 'nmnist':
+    baseline_loaders = notmnist_task_loaders(params.batch_size)[0]
+    loaders = notmnist_task_loaders(params.batch_size)
 
-    if params.pretrain_epochs > 0:
-      mle = DNet(
-        in_dim=params.in_dim,
-        hidden_dim=params.hidden_dim,
-        out_dim=params.out_dim,
-        hidden_layers=params.hidden_layers,
-        learning_rate=params.learning_rate,
-      ).to(torch_device())
-      mle = torch.compile(mle)
-      mle.train_run(
-        baseline_loaders[0][0],
-        baseline_loaders[1][0],
-        num_epochs=params.pretrain_epochs,
-      )
-    else:
-      mle = None
-
-    model = Ddm(
+  if params.pretrain_epochs > 0:
+    mle = DNet(
       in_dim=params.in_dim,
       hidden_dim=params.hidden_dim,
       out_dim=params.out_dim,
       hidden_layers=params.hidden_layers,
-      ntasks=params.ntasks,
-      batch_size=params.batch_size,
-      layer_init_std=params.layer_init_std,
-      per_task_opt=params.per_task_opt,
-      bayesian_test_samples=params.bayesian_test_samples,
-      bayesian_train_samples=params.bayesian_train_samples,
-      coreset_size=params.coreset_size,
       learning_rate=params.learning_rate,
-      mle=mle,
-      multihead=params.multihead,
     ).to(torch_device())
-    # we have lots of dynamic control flow. not sure about this
-    # model = torch.compile(model)
-    model.train_test_run(loaders, num_epochs=params.epochs)
+    mle = torch.compile(mle)
+    mle.train_run(
+      baseline_loaders[0][0],
+      baseline_loaders[1][0],
+      num_epochs=params.pretrain_epochs,
+    )
+  else:
+    mle = None
+
+  model = Ddm(
+    in_dim=params.in_dim,
+    hidden_dim=params.hidden_dim,
+    out_dim=params.out_dim,
+    hidden_layers=params.hidden_layers,
+    ntasks=params.ntasks,
+    batch_size=params.batch_size,
+    layer_init_std=params.layer_init_std,
+    per_task_opt=params.per_task_opt,
+    bayesian_test_samples=params.bayesian_test_samples,
+    bayesian_train_samples=params.bayesian_train_samples,
+    coreset_size=params.coreset_size,
+    learning_rate=params.learning_rate,
+    mle=mle,
+    multihead=params.multihead,
+  ).to(torch_device())
+  # we have lots of dynamic control flow. not sure about this
+  # model = torch.compile(model)
+  model.train_test_run(loaders, num_epochs=params.epochs)
+  return model
+
+
+def generative_model_pipeline(params):
+  loaders = None
+  if params.problem == 'mnist':
+    loaders = mnist_cont_task_loaders(params.batch_size)
+  if params.problem == 'nmnist':
+    loaders = nmnist_cont_task_loaders(params.batch_size)
+
+  model = Dgm(
+    in_dim=params.in_dim,
+  ).to(torch_device())
+  model.train_test_run(loaders, num_epochs=params.epochs)
+  return model
+
+
+def baseline_generative_model():
+  model = Vae(28 * 28, 500, 50, 1e-4).to(torch_device())
+  train_loader, test_loader = mnist_vanilla_task_loaders(50)
+  model.train_run(train_loader, test_loader, num_epochs=200)
+  model.plot_reconstructions(test_loader)
+  plot_samples(model)
+  return model
+
+
+def model_pipeline(params, wandb_log=True):
+  wandb_mode = 'online' if wandb_log else 'disabled'
+  with wandb.init(project='vcl', config=params, mode=wandb_mode):
+    params = wandb.config
+    model = None
+    if params.experiment == 'discriminative':
+      model = discriminative_model_pipeline(params)
+    if params.experiment == 'generative':
+      model = generative_model_pipeline(params)
   return model
 
 
@@ -887,6 +1019,7 @@ if __name__ == '__main__':
     learning_rate=1e-3,
     multihead=False,
     problem='pmnist',
+    experiment='discriminative',
     model='vcl',
   )
 
@@ -908,6 +1041,7 @@ if __name__ == '__main__':
     learning_rate=1e-3,
     multihead=True,
     problem='smnist',
+    experiment='discriminative',
     model='vcl',
   )
 
@@ -928,15 +1062,11 @@ if __name__ == '__main__':
     learning_rate=1e-3,
     multihead=True,
     problem='nmnist',
+    experiment='discriminative',
     model='vcl',
   )
 
-  # model = discr_model_pipeline(ddm_pmnist_run, wandb_log=True)
-  # model = discr_model_pipeline(ddm_smnist_run, wandb_log=True)
-  # model = discr_model_pipeline(ddm_nmnist_run, wandb_log=True)
-
-  model = Vae(28 * 28, 500, 50, 1e-4).to(torch_device())
-  train_loader, test_loader = mnist_task_loaders(50)
-  model.train_run(train_loader, test_loader, num_epochs=200)
-  plot_reconstructions(model, test_loader)
-  plot_samples(model)
+  # model = model_pipeline(ddm_pmnist_run, wandb_log=True)
+  # model = model_pipeline(ddm_smnist_run, wandb_log=True)
+  # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
+  # model = baseline_generative_model()
