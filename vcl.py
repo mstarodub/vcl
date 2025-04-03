@@ -708,6 +708,7 @@ class Vae(nn.Module):
       nn.Linear(latent_dim, hidden_dim),
       nn.ReLU(),
       nn.Linear(hidden_dim, in_dim),
+      nn.Sigmoid(),
     )
 
   def forward(self, x):
@@ -718,9 +719,9 @@ class Vae(nn.Module):
     return self.decoder(z), mu, log_sigma
 
   def elbo(self, mu, log_sigma, gen, orig):
-    reconstr_likelihood = -F.mse_loss(gen, orig, reduction='sum')
+    reconstr_likelihood = -F.mse_loss(gen, orig, reduction='mean')
     # kl_div_gaussians, but (mu_2, sigma_2) == (0, 1)
-    kl_loss = -0.5 * torch.sum(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
+    kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
     return reconstr_likelihood - kl_loss
 
   def train_epoch(self, loader, opt):
@@ -935,7 +936,7 @@ if __name__ == '__main__':
   # model = discr_model_pipeline(ddm_nmnist_run, wandb_log=True)
 
   model = Vae(28 * 28, 500, 50, 1e-4).to(torch_device())
-  train_loader, test_loader = mnist_task_loaders(256)
+  train_loader, test_loader = mnist_task_loaders(50)
   model.train_run(train_loader, test_loader, num_epochs=200)
   plot_reconstructions(model, test_loader)
   plot_samples(model)
