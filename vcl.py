@@ -433,12 +433,12 @@ class DNet(nn.Module):
   def train_run(self, train_loader, test_loader, num_epochs):
     loss_fn = F.cross_entropy
     opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-    for i in trange(num_epochs, desc='pretrain'):
+    for epoch in (pbar := trange(num_epochs)):
       train_loss, train_acc = self.train_epoch(train_loader, loss_fn, opt)
       test_loss, test_acc = self.test_run(test_loader, loss_fn)
-    print(
-      f'after epoch {num_epochs}: train loss {train_loss:.4f} train acc {train_acc:.4f} test loss {test_loss:.4f} test acc {test_acc:.4f}'
-    )
+      pbar.set_description(
+        f'pretrain epoch {epoch}: train loss {train_loss:.4f} train acc {train_acc:.4f} test loss {test_loss:.4f} test acc {test_acc:.4f}'
+      )
 
   @torch.no_grad()
   def test_run(self, loader, loss_fn):
@@ -857,10 +857,12 @@ class Vae(nn.Module):
 
   def train_run(self, train_loader, test_loader, num_epochs):
     opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-    for epoch in range(num_epochs):
+    for epoch in (pbar := trange(num_epochs)):
       train_loss, train_acc = self.train_epoch(train_loader, opt)
       test_loss, test_acc = self.test_run(test_loader)
-      print(f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f}')
+      pbar.set_description(
+        f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f}'
+      )
 
   def classifier_certainty(self, gen, target):
     return torch.tensor(0)
@@ -969,10 +971,10 @@ def generative_model_pipeline(params):
   return model
 
 
-def baseline_generative_model():
+def baseline_generative_model(num_epochs):
   model = Vae(28 * 28, 500, 50, 1e-4).to(torch_device())
   train_loader, test_loader = mnist_vanilla_task_loaders(50)
-  model.train_run(train_loader, test_loader, num_epochs=200)
+  model.train_run(train_loader, test_loader, num_epochs=num_epochs)
   model.plot_reconstructions(test_loader)
   plot_samples(model)
   return model
@@ -1069,4 +1071,4 @@ if __name__ == '__main__':
   # model = model_pipeline(ddm_pmnist_run, wandb_log=True)
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
-  # model = baseline_generative_model()
+  model = baseline_generative_model(20)
