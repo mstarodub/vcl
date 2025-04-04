@@ -132,40 +132,15 @@ class Ddm(nn.Module):
     # and finally arrive at eq (3) without the N factor
     return -F.cross_entropy(pred, target)
 
-  def wandb_log_tensors(self):
+  def wandb_log(self, metrics):
     for bli, bl in enumerate(self.shared):
       if isinstance(bl, BayesianLinear):
-        wandb.log(
-          {
-            f's_{bli}_sigma_w': torch.std(torch.exp(bl.log_sigma_w)).detach().item(),
-          }
+        metrics[f's_{bli}_sigma_w'] = (
+          torch.std(torch.exp(bl.log_sigma_w)).detach().item()
         )
     for hli, hl in enumerate(self.heads):
-      wandb.log(
-        {
-          f'h_{hli}_sigma_w': torch.std(torch.exp(hl.log_sigma_w)).detach().item(),
-        }
-      )
-
-  def train_epoch(self, loader, opt, task, epoch):
-    device = torch_device()
-    for batch, batch_data in enumerate(loader):
-      if self.multihead:
-        data, target, t = batch_data
-      else:
-        (data, target), t = batch_data, None
-      data, target = data.to(device), target.to(device)
-      self.zero_grad()
-      preds = [self(data, task=t) for _ in range(self.bayesian_train_samples)]
-      mean_pred = torch.stack(preds).mean(0)
-      acc = accuracy(mean_pred, target)
-      losses = torch.stack([self.sgvb_mc(pred, target) for pred in preds])
-      loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
-      if batch % self.logging_every == 0 and batch_data.shape[0] == self.batch_size:
-        wandb.log({'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc})
-        self.wandb_log_tensors()
-      loss.backward()
-      opt.step()
+      metrics[f'h_{hli}_sigma_w'] = torch.std(torch.exp(hl.log_sigma_w)).detach().item()
+    wandb.log(metrics)
 
   # sample from (D_t) \cup C_{t-1}
   def select_coreset(
@@ -235,6 +210,26 @@ class Ddm(nn.Module):
       shuffle=True if data else False,
       num_workers=12 if torch.cuda.is_available() else 0,
     )
+
+  def train_epoch(self, loader, opt, task, epoch):
+    device = torch_device()
+    for batch, batch_data in enumerate(loader):
+      if self.multihead:
+        data, target, t = batch_data
+      else:
+        (data, target), t = batch_data, None
+      data, target = data.to(device), target.to(device)
+      self.zero_grad()
+      preds = [self(data, task=t) for _ in range(self.bayesian_train_samples)]
+      mean_pred = torch.stack(preds).mean(0)
+      acc = accuracy(mean_pred, target)
+      losses = torch.stack([self.sgvb_mc(pred, target) for pred in preds])
+      loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
+      loss.backward()
+      opt.step()
+      if batch % self.logging_every == 0 and batch_data.shape[0] == self.batch_size:
+        metrics = {'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc}
+        self.wandb_log(metrics)
 
   def train_test_run(self, tasks, num_epochs):
     self.train()

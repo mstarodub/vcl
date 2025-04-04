@@ -1,5 +1,9 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+import wandb
+from tqdm.auto import tqdm, trange
 
 import dataloaders
 from util import torch_device
@@ -14,6 +18,7 @@ class Dgm(nn.Module):
     hidden_dim,
     latent_dim,
     ntasks,
+    batch_size,
     layer_init_std,
     learning_rate,
     classifier,
@@ -21,6 +26,7 @@ class Dgm(nn.Module):
   ):
     super().__init__()
     self.logging_every = logging_every
+    self.batch_size = batch_size
     self.classifier = classifier
     self.learning_rate = learning_rate
 
@@ -53,64 +59,105 @@ class Dgm(nn.Module):
       for _ in range(ntasks)
     )
 
-    def encode(self, x, task):
-      curr_batch_size = x.shape[0]
-      scatter_encoders = torch.zeros(
-        curr_batch_size,
-        2 * self.encoders[0][-1].out_dim,
-        device=x.device,
-        dtype=x.dtype,
+  def encode(self, x, task):
+    curr_batch_size = x.shape[0]
+    scatter_encoders = torch.zeros(
+      curr_batch_size,
+      2 * self.encoders[0][-1].out_dim,
+      device=x.device,
+      dtype=x.dtype,
+    )
+    for enc_idx, enc in enumerate(self.encoder):
+      mask = task == enc_idx
+      scatter_encoders += enc(x) * mask.unsqueeze(1)
+    mu = scatter_encoders[:, : self.latent_dim]
+    log_sigma = scatter_encoders[:, self.latent_dim :]
+    eps = torch.randn_like(mu, device=x.device)
+    return mu + torch.exp(log_sigma) * eps
+
+  def decode(self, z, task):
+    curr_batch_size = z.shape[0]
+    h = self.decoder_shared(z)
+    scatter_heads = torch.zeros(
+      curr_batch_size,
+      self.decoder_heads[0][-2].out_dim,
+      device=z.device,
+      dtype=z.dtype,
+    )
+    for head_idx, head in enumerate(self.decoder_heads):
+      mask = task == head_idx
+      scatter_heads += head(h) * mask.unsqueeze(1)
+    return scatter_heads
+
+  def forward(self, x, task):
+    z = self.encode(x, task)
+    return self.decode(z, task)
+
+  def elbo(self, mu, log_sigma, gen, orig):
+    reconstr_likelihood = -F.mse_loss(gen, orig, reduction='mean')
+    kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
+    return reconstr_likelihood - kl_loss
+
+  def compute_kl(self):
+    pass
+
+  def train_epoch(self, loader, opt, task, epoch):
+    self.train()
+    device = torch_device()
+    for batch, batch_data in enumerate(loader):
+      orig, ta = batch_data
+      orig, ta = orig.to(device), ta.to(device)
+      self.zero_grad()
+      # TODO: no bayesian sampling for now
+      gen, mu, log_sigma = self(orig, ta)
+      acc = classifier_certainty(self.classifier, gen, ta)
+      loss = -self.elbo(mu, log_sigma, gen, orig) + self.compute_kl() / len(
+        loader.dataset
       )
-      for enc_idx, enc in enumerate(self.encoder):
-        mask = task == enc_idx
-        scatter_encoders += enc(x) * mask.unsqueeze(1)
-      mu = scatter_encoders[:, : self.latent_dim]
-      log_sigma = scatter_encoders[:, self.latent_dim :]
-      eps = torch.randn_like(mu, device=x.device)
-      return mu + torch.exp(log_sigma) * eps
+      loss.backward()
+      opt.step()
+      if batch % self.logging_every == 0 and batch_data.shape[0] == self.batch_size:
+        metrics = {'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc}
+        self.wandb_log(metrics)
 
-    def decode(self, z, task):
-      curr_batch_size = z.shape[0]
-      h = self.decoder_shared(z)
-      scatter_heads = torch.zeros(
-        curr_batch_size,
-        self.decoder_heads[0][-2].out_dim,
-        device=z.device,
-        dtype=z.dtype,
-      )
-      for head_idx, head in enumerate(self.decoder_heads):
-        mask = task == head_idx
-        scatter_heads += head(h) * mask.unsqueeze(1)
-      return scatter_heads
+  def train_test_run(self, tasks, num_epochs):
+    self.train()
+    device = torch_device()
+    wandb.watch(self, log_freq=100)
+    for task, (train_loaders, test_loaders) in enumerate(tasks):
+      opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+      for epoch in trange(num_epochs, desc=f'task {task}'):
+        self.train_epoch(train_loaders[-1])
+    pass
 
-    def forward(self, x, task):
-      z = self.encode(x, task)
-      return decode(z, task)
-
-    def train_epoch(self, loader, opt, task, epoch):
-      self.train()
-      device = torch_device()
+  @torch.no_grad()
+  def test_run(self, loaders, task):
+    self.eval()
+    device = torch_device()
+    avg_accuracies = []
+    for test_task, loader in tqdm(enumerate(loaders), desc=f'task {task} phase t'):
+      task_accuracies = []
       for batch, batch_data in enumerate(loader):
-        orig, ta = batch_data
+        orig, ta = batch_data[0], batch_data[1]
         orig, ta = orig.to(device), ta.to(device)
-        self.zero_grad()
         # TODO: no bayesian sampling for now
-        gen = self(orig, ta)
+        gen, mu, log_sigma = self(orig, ta)
         acc = classifier_certainty(self.classifier, gen, ta)
-        loss = -self.elbo(...) + self.compute_kl() / len
-        # XXX
-        (loader.dataset)
-      pass
+        task_accuracies.append(acc.item())
+      task_accuracy = np.mean(task_accuracies)
+      wandb.log({'task': task, f'test_acc_task_{test_task}': task_accuracy})
+      avg_accuracies.append(task_accuracy)
+    wandb.log({'task': task, 'test_acc': np.mean(avg_accuracies)})
 
-    @torch.no_grad()
-    def test_run(self, loaders, task):
-      self.eval()
-      device = torch_device()
-      pass
-
-    def train_test_run(self, tasks, num_epochs):
-      self.train()
-      pass
+  def wandb_log(self, metrics):
+    for bli, bl in enumerate(self.decoder_shared):
+      if isinstance(bl, BayesianLinear):
+        metrics[f's_{bli}_sigma_w'] = (
+          torch.std(torch.exp(bl.log_sigma_w)).detach().item()
+        )
+    for hli, hl in enumerate(self.decoder_heads):
+      metrics[f'h_{hli}_sigma_w'] = torch.std(torch.exp(hl.log_sigma_w)).detach().item()
+    wandb.log(metrics)
 
 
 def generative_model_pipeline(params):
@@ -127,6 +174,7 @@ def generative_model_pipeline(params):
     hidden_dim=params.hidden_dim,
     latent_dim=params.latent_dim,
     ntasks=params.ntasks,
+    batch_size=params.batch_size,
     layer_init_std=params.layer_init_std,
     learning_rate=params.learning_rate,
     classifier=classifier,
