@@ -51,9 +51,10 @@ class Vae(nn.Module):
     return self.decoder(z), mu, log_sigma
 
   def elbo(self, mu, log_sigma, gen, orig):
-    reconstr_likelihood = -F.mse_loss(gen, orig, reduction='mean')
+    reconstr_likelihood = -F.binary_cross_entropy(gen, orig, reduction='sum')
+    # reconstr_likelihood = -F.mse_loss(gen, orig, reduction='mean')
     # kl_div_gaussians, but (mu_2, sigma_2) == (0, 1)
-    kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
+    kl_loss = -0.5 * torch.sum(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
     return reconstr_likelihood - kl_loss
 
   def train_epoch(self, loader, opt):
@@ -108,11 +109,11 @@ def baseline_generative_model(num_epochs):
   model = Vae(
     in_dim=28 * 28,
     hidden_dim=500,
-    latent_dim=50,
-    learning_rate=1e-4,
+    latent_dim=2,
+    learning_rate=1e-3,
     classifier=None,
   ).to(torch_device())
-  train_loader, test_loader = dataloaders.mnist_vanilla_task_loaders(50)
+  train_loader, test_loader = dataloaders.mnist_vanilla_task_loaders(batch_size=128)
   model.train_run(train_loader, test_loader, num_epochs=num_epochs)
   util.plot_reconstructions(model, test_loader)
   util.plot_samples(model)
