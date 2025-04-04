@@ -120,6 +120,6 @@ if __name__ == '__main__':
   # model = model_pipeline(ddm_pmnist_run, wandb_log=True)
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
-  model = vae.baseline_generative_model(200)
+  model = vae.baseline_generative_model(num_epochs=20)
   # model = model_pipeline(dgm_mnist_run, wandb_log=False)
   # model = model_pipeline(dgm_nmnist_run, wandb_log=False)

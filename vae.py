@@ -109,7 +109,7 @@ def baseline_generative_model(num_epochs):
   model = Vae(
     in_dim=28 * 28,
     hidden_dim=500,
-    latent_dim=2,
+    latent_dim=50,
     learning_rate=1e-3,
     classifier=None,
   ).to(torch_device())
