@@ -20,7 +20,14 @@ def transform_base():
   )
 
 
-def transform(mean, std):
+def transform(mean=None, std=None):
+  if mean is None or std is None:
+    return transforms.Compose(
+      [
+        transform_base(),
+        transforms.Lambda(torch.flatten),
+      ]
+    )
   return transforms.Compose(
     [
       transform_base(),
@@ -30,6 +37,16 @@ def transform(mean, std):
   )
 
 
+# we do not use this except for classification.
+# v1.ToTensor == v2.ToImage \circ v2.ToDtype(torch.float32, scale=True)
+# maps image data to [0,1]. normalizing this would yield negative values
+# allowing slightly better convergence in classifiers with MSE at the expense
+# of breaking BCE and making VAE MSE code a lot more cumbersome
+# summary:
+# VAE + BCE: needs [0,1] (probability interpretation from bernoulli)
+# VAE + MSE: ideally normalized, but have to rescale decoder output(!) -> [0,1] ok
+# classification (F.cross_entropy): ideally normalized
+# regression: allows us to reuse [0,1] targets from classification, also interpretable as class probabilites
 def mean_std_image_dataset(dataset: torch.utils.data.Dataset):
   dataset.transform = transform_base()
   t_data = torch.stack([d[0] for d in dataset]).squeeze()
@@ -56,20 +73,18 @@ def precomp_notmnist_stats(verify=False):
 
 
 def mnist_vanilla_task_loaders(batch_size):
-  mean_mnist, std_mnist = precomp_mnist_stats()
-
   data_train = datasets.MNIST(
     './data',
     train=True,
     download=True,
-    transform=transform(mean_mnist, std_mnist),
+    transform=transform(),
     target_transform=torch.tensor,
   )
   data_test = datasets.MNIST(
     './data',
     train=False,
     download=True,
-    transform=transform(mean_mnist, std_mnist),
+    transform=transform(),
     target_transform=torch.tensor,
   )
   train_loader = torch.utils.data.DataLoader(
@@ -87,21 +102,19 @@ def mnist_vanilla_task_loaders(batch_size):
 
 
 def mnist_cont_task_loaders(batch_size):
-  mean_mnist, std_mnist = precomp_mnist_stats()
-
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
   train_ds = datasets.MNIST(
     './data',
     train=True,
     download=True,
-    transform=transform(mean_mnist, std_mnist),
+    transform=transform(),
     target_transform=torch.tensor,
   )
   test_ds = datasets.MNIST(
     './data',
     train=False,
     download=True,
-    transform=transform(mean_mnist, std_mnist),
+    transform=transform(),
     target_transform=torch.tensor,
   )
 
@@ -132,13 +145,11 @@ def mnist_cont_task_loaders(batch_size):
 
 
 def nmnist_cont_task_loaders(batch_size):
-  mean_notmnist_small, std_notmnist_small = precomp_notmnist_stats()
-
   train_part = 0.8
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
   notmnist_data = datasets.ImageFolder(
     './data/notMNIST_small',
-    transform=transform(mean_notmnist_small, std_notmnist_small),
+    transform=transform(),
   )
   notmnist_data_targets = torch.tensor(notmnist_data.targets)
   train_subset, test_subset = torch.utils.data.random_split(
