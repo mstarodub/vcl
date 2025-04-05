@@ -9,7 +9,7 @@ from itertools import chain
 import dataloaders
 import util
 from util import torch_device
-from accuracy import classifier_certainty
+from accuracy import classifier_uncertainty
 from bayesian_layer import BayesianLinear
 
 
@@ -129,14 +129,19 @@ class Dgm(nn.Module):
       self.zero_grad()
       # TODO: no bayesian sampling for now
       gen, mu, log_sigma = self(orig, ta)
-      acc = classifier_certainty(self.classifier, gen, ta)
+      uncert = classifier_uncertainty(self.classifier, gen, ta)
       loss = -self.elbo(mu, log_sigma, gen, orig) + self.compute_kl() / len(
         loader.dataset
       )
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and orig.shape[0] == self.batch_size:
-        metrics = {'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc}
+        metrics = {
+          'task': task,
+          'epoch': epoch,
+          'train_loss': loss,
+          'train_uncert': uncert,
+        }
         self.wandb_log(metrics)
 
   def train_test_run(self, tasks, num_epochs):
@@ -152,20 +157,20 @@ class Dgm(nn.Module):
   def test_run(self, loaders, task):
     self.eval()
     device = torch_device()
-    avg_accuracies = []
+    avg_uncertainties = []
     for test_task, loader in tqdm(enumerate(loaders), desc=f'task {task} phase t'):
-      task_accuracies = []
+      task_uncertainties = []
       for batch, batch_data in enumerate(loader):
         orig, ta = batch_data[0], batch_data[1]
         orig, ta = orig.to(device), ta.to(device)
         # TODO: no bayesian sampling for now
         gen, mu, log_sigma = self(orig, ta)
-        acc = classifier_certainty(self.classifier, gen, ta)
-        task_accuracies.append(acc.item())
-      task_accuracy = np.mean(task_accuracies)
-      wandb.log({'task': task, f'test_acc_task_{test_task}': task_accuracy})
-      avg_accuracies.append(task_accuracy)
-    wandb.log({'task': task, 'test_acc': np.mean(avg_accuracies)})
+        uncert = classifier_uncertainty(self.classifier, gen, ta)
+        task_uncertainties.append(uncert.item())
+      task_uncertainty = np.mean(task_uncertainties)
+      wandb.log({'task': task, f'test_uncert_task_{test_task}': task_uncertainty})
+      avg_uncertainties.append(task_uncertainty)
+    wandb.log({'task': task, 'test_uncert': np.mean(avg_uncertainties)})
 
   def wandb_log(self, metrics):
     for bli, bl in enumerate(self.decoder_shared):

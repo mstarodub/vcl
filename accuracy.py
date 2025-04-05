@@ -88,9 +88,10 @@ class CNNEnsembleClassifier(nn.Module):
 
 
 @torch.no_grad()
-def classifier_certainty(classifier, gen, target):
+def classifier_uncertainty(classifier, gen, target):
   logits = classifier(gen)
-  probs = F.softmax(logits, dim=1)
+  eps = 1e-8
+  probs = F.softmax(logits, dim=1).clamp(min=eps)
   one_hot = F.one_hot(target, num_classes=10).float()
   # D_KL(one-hot || predicted)
   return F.kl_div(probs.log(), one_hot, reduction='batchmean')

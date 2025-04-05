@@ -7,7 +7,7 @@ from tqdm.auto import trange
 import util
 from util import torch_device
 import dataloaders
-from accuracy import classifier_certainty
+from accuracy import classifier_uncertainty
 
 
 class Vae(nn.Module):
@@ -60,42 +60,42 @@ class Vae(nn.Module):
   def train_epoch(self, loader, opt):
     device = torch_device()
     self.train()
-    losses, accuracies = [], []
+    losses, uncertainties = [], []
     for batch_data in loader:
       data, target = batch_data[0], batch_data[1]
       data, target = data.to(device), target.to(device)
       opt.zero_grad()
       gen, mu, log_sigma = self(data)
       loss = -self.elbo(mu, log_sigma, gen, data)
-      acc = classifier_certainty(self.classifier, gen, target)
+      uncert = classifier_uncertainty(self.classifier, gen, target)
       loss.backward()
       opt.step()
       losses.append(loss.item())
-      accuracies.append(acc.item())
-    return np.mean(losses), np.mean(accuracies)
+      uncertainties.append(uncert.item())
+    return np.mean(losses), np.mean(uncertainties)
 
   @torch.no_grad()
   def test_run(self, loader):
     device = torch_device()
     self.eval()
-    losses, accuracies = [], []
+    losses, uncertainties = [], []
     for batch_data in loader:
       data, target = batch_data[0], batch_data[1]
       data, target = data.to(device), target.to(device)
       gen, mu, log_sigma = self(data)
       loss = -self.elbo(mu, log_sigma, gen, data)
-      acc = classifier_certainty(self.classifier, gen, target)
+      uncert = classifier_uncertainty(self.classifier, gen, target)
       losses.append(loss.item())
-      accuracies.append(acc.item())
-    return np.mean(losses), np.mean(accuracies)
+      uncertainties.append(uncert.item())
+    return np.mean(losses), np.mean(uncertainties)
 
   def train_run(self, train_loader, test_loader, num_epochs):
     opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
     for epoch in (pbar := trange(num_epochs)):
-      train_loss, train_acc = self.train_epoch(train_loader, opt)
-      test_loss, test_acc = self.test_run(test_loader)
+      train_loss, train_uncert = self.train_epoch(train_loader, opt)
+      test_loss, test_uncert = self.test_run(test_loader)
       pbar.set_description(
-        f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f} train acc {train_acc:.4f} test acc {test_acc:.4f}'
+        f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f} train uncert {train_uncert:.4f} test uncert {test_uncert:.4f}'
       )
 
   @torch.no_grad()
