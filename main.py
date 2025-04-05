@@ -94,6 +94,7 @@ if __name__ == '__main__':
     hidden_dim=500,
     latent_dim=50,
     ntasks=10,
+    # 200
     epochs=20,
     batch_size=64,
     layer_init_std=None,

@@ -47,21 +47,27 @@ def visualize_sample_img(loader):
   plt.show()
 
 
-def plot_samples(generative_model):
+def plot_samples(generative_model, multihead):
+  device = torch_device()
   axes = plt.subplots(1, 10, figsize=(10, 1))[1]
   for d in range(10):
-    sample = generative_model.sample(d).reshape(28, 28)
+    if multihead:
+      sample = generative_model.sample(torch.tensor([d], device=device)).reshape(28, 28)
+    else:
+      sample = generative_model.sample().reshape(28, 28)
     axes[d].imshow(sample, cmap='gray')
     axes[d].axis('off')
   plt.show()
 
 
 @torch.no_grad()
-def plot_reconstructions(generative_model, loader):
+def plot_reconstructions(generative_model, loader, multihead):
+  device = torch_device()
   generative_model.eval()
-  data, _ = next(iter(loader))
-  data = data[:10]
-  recon, _, _ = generative_model(data)
+  data, task = next(iter(loader))
+  data, task = data[:10], task[:10]
+  data, task = data.to(device), task.to(device)
+  recon, _, _ = generative_model(data, task) if multihead else generative_model(data)
   axes = plt.subplots(2, 10, figsize=(10, 2))[1]
   for i in range(10):
     axes[0, i].imshow(data[i].reshape(28, 28), cmap='gray')

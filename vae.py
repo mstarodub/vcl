@@ -99,7 +99,7 @@ class Vae(nn.Module):
       )
 
   @torch.no_grad()
-  def sample(self, _):
+  def sample(self):
     self.eval()
     z = torch.randn(1, self.latent_dim, device=torch_device())
     return self.decoder(z)
@@ -115,6 +115,6 @@ def baseline_generative_model(num_epochs):
   ).to(torch_device())
   train_loader, test_loader = dataloaders.mnist_vanilla_task_loaders(batch_size=128)
   model.train_run(train_loader, test_loader, num_epochs=num_epochs)
-  util.plot_reconstructions(model, test_loader)
-  util.plot_samples(model)
+  util.plot_reconstructions(model, test_loader, multihead=False)
+  util.plot_samples(model, multihead=False)
   return model

@@ -204,6 +204,6 @@ def generative_model_pipeline(params):
 
   model.train_test_run(loaders, num_epochs=params.epochs)
   mixed_test_loader = dataloaders.mnist_vanilla_task_loaders(batch_size=128)[1]
-  util.plot_reconstructions(model, mixed_test_loader)
-  util.plot_samples(model)
+  util.plot_reconstructions(model, mixed_test_loader, multihead=True)
+  util.plot_samples(model, multihead=True)
   return model
