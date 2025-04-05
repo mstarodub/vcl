@@ -47,7 +47,7 @@ class CNNEnsembleClassifier(nn.Module):
     self.opts = [torch.optim.AdamW(model.parameters()) for model in self.models]
 
   def forward(self, x):
-    return np.mean([model(x) for model in self.models])
+    return torch.stack([model(x) for model in self.models]).mean(dim=0)
 
   def train_epoch(self, loader):
     self.train()
