@@ -2,6 +2,8 @@ import wandb
 
 import vae
 import util
+import accuracy
+import dataloaders
 from vcl_gen import generative_model_pipeline
 from vcl_disc import discriminative_model_pipeline
 
@@ -95,10 +97,12 @@ if __name__ == '__main__':
     latent_dim=50,
     ntasks=10,
     # 200
-    epochs=20,
-    batch_size=64,
+    epochs=100,
+    # 50
+    batch_size=128,
     layer_init_std=None,
-    learning_rate=1e-4,
+    # 1e-4
+    learning_rate=1e-3,
     problem='mnist',
     experiment='generative',
     model='vcl',
@@ -121,6 +125,11 @@ if __name__ == '__main__':
   # model = model_pipeline(ddm_pmnist_run, wandb_log=True)
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
+
   # model = vae.baseline_generative_model(num_epochs=20)
-  model = model_pipeline(dgm_mnist_run, wandb_log=False)
+  # model = model_pipeline(dgm_mnist_run, wandb_log=True)
   # model = model_pipeline(dgm_nmnist_run, wandb_log=False)
+
+  csf = accuracy.CNNEnsembleClassifier()
+  csf_train_loader, csf_test_loader = dataloaders.mnist_vanilla_task_loaders(256)
+  csf.train_run(csf_train_loader, csf_test_loader, num_epochs=30)
