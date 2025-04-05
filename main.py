@@ -1,3 +1,4 @@
+import torch
 import wandb
 
 import vae
@@ -126,10 +127,13 @@ if __name__ == '__main__':
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
 
-  # model = vae.baseline_generative_model(num_epochs=20)
+  csf = accuracy.CNNEnsembleClassifier()
+  csf.load_state_dict(torch.load('classifier.pt', map_location=util.torch_device()))
+  csf.to(util.torch_device())
+  # csf_train_loader, csf_test_loader = dataloaders.mnist_vanilla_task_loaders(256)
+  # csf.train_run(csf_train_loader, csf_test_loader, num_epochs=30)
+  # torch.save(csf.state_dict(), 'classifier.pt')
+
+  model = vae.baseline_generative_model(num_epochs=20, classifier=csf)
   # model = model_pipeline(dgm_mnist_run, wandb_log=True)
   # model = model_pipeline(dgm_nmnist_run, wandb_log=False)
-
-  csf = accuracy.CNNEnsembleClassifier()
-  csf_train_loader, csf_test_loader = dataloaders.mnist_vanilla_task_loaders(256)
-  csf.train_run(csf_train_loader, csf_test_loader, num_epochs=30)

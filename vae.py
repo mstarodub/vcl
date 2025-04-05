@@ -105,13 +105,13 @@ class Vae(nn.Module):
     return self.decoder(z)
 
 
-def baseline_generative_model(num_epochs):
+def baseline_generative_model(num_epochs, classifier):
   model = Vae(
     in_dim=28 * 28,
     hidden_dim=500,
     latent_dim=50,
     learning_rate=1e-3,
-    classifier=None,
+    classifier=classifier,
   ).to(torch_device())
   train_loader, test_loader = dataloaders.mnist_vanilla_task_loaders(batch_size=128)
   model.train_run(train_loader, test_loader, num_epochs=num_epochs)
