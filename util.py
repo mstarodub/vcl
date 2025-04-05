@@ -55,7 +55,7 @@ def plot_samples(generative_model, multihead):
       sample = generative_model.sample(torch.tensor([d], device=device)).reshape(28, 28)
     else:
       sample = generative_model.sample().reshape(28, 28)
-    axes[d].imshow(sample, cmap='gray')
+    axes[d].imshow(sample.cpu(), cmap='gray')
     axes[d].axis('off')
   plt.show()
 
@@ -70,7 +70,7 @@ def plot_reconstructions(generative_model, loader, multihead):
   recon, _, _ = generative_model(data, task) if multihead else generative_model(data)
   axes = plt.subplots(2, 10, figsize=(10, 2))[1]
   for i in range(10):
-    axes[0, i].imshow(data[i].reshape(28, 28), cmap='gray')
+    axes[0, i].imshow(data[i].cpu().reshape(28, 28), cmap='gray')
     axes[0, i].axis('off')
-    axes[1, i].imshow(recon[i].reshape(28, 28), cmap='gray')
+    axes[1, i].imshow(recon[i].cpu().reshape(28, 28), cmap='gray')
     axes[1, i].axis('off')
