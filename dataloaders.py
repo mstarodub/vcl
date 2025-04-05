@@ -102,7 +102,7 @@ def mnist_vanilla_task_loaders(batch_size):
 
 
 def mnist_cont_task_loaders(batch_size):
-  loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
+  loaders, cumulative_test_loaders = [], []
   train_ds = datasets.MNIST(
     './data',
     train=True,
@@ -123,13 +123,12 @@ def mnist_cont_task_loaders(batch_size):
     test_mask = test_ds.targets == task
     train_idx = torch.nonzero(train_mask).squeeze()
     test_idx = torch.nonzero(test_mask).squeeze()
-    cumulative_train_loaders.append(
-      torch.utils.data.DataLoader(
-        torch.utils.data.Subset(train_ds, train_idx),
-        batch_size=batch_size if batch_size else max(1, len(train_idx)),
-        shuffle=True,
-        num_workers=12 if torch.cuda.is_available() else 0,
-      )
+
+    train_loader = torch.utils.data.DataLoader(
+      torch.utils.data.Subset(train_ds, train_idx),
+      batch_size=batch_size if batch_size else max(1, len(train_idx)),
+      shuffle=True,
+      num_workers=12 if torch.cuda.is_available() else 0,
     )
     cumulative_test_loaders.append(
       torch.utils.data.DataLoader(
@@ -139,14 +138,14 @@ def mnist_cont_task_loaders(batch_size):
         num_workers=12 if torch.cuda.is_available() else 0,
       )
     )
-    loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
+    loaders.append((train_loader, cumulative_test_loaders.copy()))
 
   return loaders
 
 
 def nmnist_cont_task_loaders(batch_size):
   train_part = 0.8
-  loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
+  loaders, cumulative_test_loaders = [], []
   notmnist_data = datasets.ImageFolder(
     './data/notMNIST_small',
     transform=transform(),
@@ -166,14 +165,14 @@ def nmnist_cont_task_loaders(batch_size):
     test_idx_sub = torch.nonzero(test_mask).squeeze()
     train_idx = train_idx_full[train_idx_sub]
     test_idx = test_idx_full[test_idx_sub]
-    cumulative_train_loaders.append(
-      torch.utils.data.DataLoader(
-        torch.utils.data.Subset(notmnist_data, train_idx),
-        batch_size=batch_size if batch_size else max(1, len(train_idx)),
-        shuffle=True,
-        num_workers=12 if torch.cuda.is_available() else 0,
-      )
+
+    train_loader = torch.utils.data.DataLoader(
+      torch.utils.data.Subset(notmnist_data, train_idx),
+      batch_size=batch_size if batch_size else max(1, len(train_idx)),
+      shuffle=True,
+      num_workers=12 if torch.cuda.is_available() else 0,
     )
+
     cumulative_test_loaders.append(
       torch.utils.data.DataLoader(
         torch.utils.data.Subset(notmnist_data, test_idx),
@@ -182,7 +181,7 @@ def nmnist_cont_task_loaders(batch_size):
         num_workers=12 if torch.cuda.is_available() else 0,
       )
     )
-    loaders.append((cumulative_train_loaders.copy(), cumulative_test_loaders.copy()))
+    loaders.append((train_loader, cumulative_test_loaders.copy()))
 
   return loaders
 

@@ -4,8 +4,10 @@ import torch.nn.functional as F
 import numpy as np
 import wandb
 from tqdm.auto import tqdm, trange
+from itertools import chain
 
 import dataloaders
+import util
 from util import torch_device
 from accuracy import classifier_certainty
 from bayesian_layer import BayesianLinear
@@ -59,21 +61,32 @@ class Dgm(nn.Module):
       for _ in range(ntasks)
     )
 
+  @property
+  def bayesian_layers(self):
+    return [
+      layer
+      for layer in list(self.decoder_shared)
+      # list of modulelists
+      + list(chain.from_iterable(self.decoder_heads))
+      if isinstance(layer, BayesianLinear)
+    ]
+
   def encode(self, x, task):
     curr_batch_size = x.shape[0]
     scatter_encoders = torch.zeros(
       curr_batch_size,
-      2 * self.encoders[0][-1].out_dim,
+      self.encoders[0][-1].out_features,
       device=x.device,
       dtype=x.dtype,
     )
-    for enc_idx, enc in enumerate(self.encoder):
+    for enc_idx, enc in enumerate(self.encoders):
       mask = task == enc_idx
       scatter_encoders += enc(x) * mask.unsqueeze(1)
     mu = scatter_encoders[:, : self.latent_dim]
     log_sigma = scatter_encoders[:, self.latent_dim :]
     eps = torch.randn_like(mu, device=x.device)
-    return mu + torch.exp(log_sigma) * eps
+    z = mu + torch.exp(log_sigma) * eps
+    return z, mu, log_sigma
 
   def decode(self, z, task):
     curr_batch_size = z.shape[0]
@@ -89,9 +102,15 @@ class Dgm(nn.Module):
       scatter_heads += head(h) * mask.unsqueeze(1)
     return scatter_heads
 
+  @torch.no_grad()
+  def sample(self, digit):
+    self.eval()
+    z = torch.randn(1, self.latent_dim, device=torch_device())
+    return self.decode(z, digit)
+
   def forward(self, x, task):
-    z = self.encode(x, task)
-    return self.decode(z, task)
+    z, mu, log_sigma = self.encode(x, task)
+    return self.decode(z, task), mu, log_sigma
 
   def elbo(self, mu, log_sigma, gen, orig):
     reconstr_likelihood = -F.mse_loss(gen, orig, reduction='mean')
@@ -99,7 +118,7 @@ class Dgm(nn.Module):
     return reconstr_likelihood - kl_loss
 
   def compute_kl(self):
-    pass
+    return sum(layer.kl_layer() for layer in self.bayesian_layers)
 
   def train_epoch(self, loader, opt, task, epoch):
     self.train()
@@ -116,19 +135,18 @@ class Dgm(nn.Module):
       )
       loss.backward()
       opt.step()
-      if batch % self.logging_every == 0 and batch_data.shape[0] == self.batch_size:
+      if batch % self.logging_every == 0 and orig.shape[0] == self.batch_size:
         metrics = {'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc}
         self.wandb_log(metrics)
 
   def train_test_run(self, tasks, num_epochs):
     self.train()
-    device = torch_device()
     wandb.watch(self, log_freq=100)
-    for task, (train_loaders, test_loaders) in enumerate(tasks):
+    for task, (train_loader, test_loaders) in enumerate(tasks):
       opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
       for epoch in trange(num_epochs, desc=f'task {task}'):
-        self.train_epoch(train_loaders[-1])
-    pass
+        self.train_epoch(train_loader, opt, task, epoch)
+      self.test_run(test_loaders, task)
 
   @torch.no_grad()
   def test_run(self, loaders, task):
@@ -155,8 +173,12 @@ class Dgm(nn.Module):
         metrics[f's_{bli}_sigma_w'] = (
           torch.std(torch.exp(bl.log_sigma_w)).detach().item()
         )
-    for hli, hl in enumerate(self.decoder_heads):
-      metrics[f'h_{hli}_sigma_w'] = torch.std(torch.exp(hl.log_sigma_w)).detach().item()
+    for hi, head in enumerate(self.decoder_heads):
+      for hli, hl in enumerate(head):
+        if isinstance(bl, BayesianLinear):
+          metrics[f'h_{hi}_{hli}_sigma_w'] = (
+            torch.std(torch.exp(hl.log_sigma_w)).detach().item()
+          )
     wandb.log(metrics)
 
 
@@ -179,5 +201,9 @@ def generative_model_pipeline(params):
     learning_rate=params.learning_rate,
     classifier=classifier,
   ).to(torch_device())
+
   model.train_test_run(loaders, num_epochs=params.epochs)
+  mixed_test_loader = dataloaders.mnist_vanilla_task_loaders(batch_size=128)[1]
+  util.plot_reconstructions(model, mixed_test_loader)
+  util.plot_samples(model)
   return model

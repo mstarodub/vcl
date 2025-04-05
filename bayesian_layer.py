@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from util import torch_device
+from util import torch_device, kl_div_gaussians
 
 
 class BayesianLinear(nn.Module):
@@ -46,3 +46,10 @@ class BayesianLinear(nn.Module):
     # standard normal
     eps = torch.randn_like(mu_out, device=x.device)
     return mu_out + sigma_out * eps
+
+  def kl_layer(self):
+    return kl_div_gaussians(
+      self.mu_w, torch.exp(self.log_sigma_w), self.prior_mu_w, self.prior_sigma_w
+    ) + kl_div_gaussians(
+      self.mu_b, torch.exp(self.log_sigma_b), self.prior_mu_b, self.prior_sigma_b
+    )

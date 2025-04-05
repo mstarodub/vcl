@@ -99,7 +99,7 @@ class Vae(nn.Module):
       )
 
   @torch.no_grad()
-  def sample(self):
+  def sample(self, _):
     self.eval()
     z = torch.randn(1, self.latent_dim, device=torch_device())
     return self.decoder(z)

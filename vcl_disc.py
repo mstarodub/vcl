@@ -88,24 +88,9 @@ class Ddm(nn.Module):
       layer.mu_b.data = layer.prior_mu_b.clone().detach()
       layer.log_sigma_b.data = torch.log(layer.prior_sigma_b.clone().detach())
 
-  @staticmethod
-  def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
-    return torch.sum(
-      torch.log(sigma_2 / sigma_1)
-      + (sigma_1**2 + (mu_1 - mu_2) ** 2) / (2 * sigma_2**2)
-      - 1 / 2
-    )
-
   def compute_kl(self):
-    def kl_layer(layer):
-      return self.kl_div_gaussians(
-        layer.mu_w, torch.exp(layer.log_sigma_w), layer.prior_mu_w, layer.prior_sigma_w
-      ) + self.kl_div_gaussians(
-        layer.mu_b, torch.exp(layer.log_sigma_b), layer.prior_mu_b, layer.prior_sigma_b
-      )
-
     # notice that the gradients of the unused heads are zeroed and hence the KL terms are zero too
-    return sum(kl_layer(layer) for layer in self.bayesian_layers)
+    return sum(layer.kl_layer() for layer in self.bayesian_layers)
 
   def forward(self, x, task=None):
     x = self.shared(x)
@@ -227,7 +212,7 @@ class Ddm(nn.Module):
       loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
       loss.backward()
       opt.step()
-      if batch % self.logging_every == 0 and batch_data.shape[0] == self.batch_size:
+      if batch % self.logging_every == 0 and data.shape[0] == self.batch_size:
         metrics = {'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc}
         self.wandb_log(metrics)
 
@@ -341,7 +326,9 @@ def discriminative_model_pipeline(params, wandb_log=True):
     mle=mle,
     multihead=params.multihead,
   ).to(torch_device())
+
   # we have lots of dynamic control flow. not sure about this
   # model = torch.compile(model)
+
   model.train_test_run(loaders, num_epochs=params.epochs)
   return model

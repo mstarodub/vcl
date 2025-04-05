@@ -29,6 +29,14 @@ def seed(seed=0):
   # torch.use_deterministic_algorithms(True)
 
 
+def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
+  return torch.sum(
+    torch.log(sigma_2 / sigma_1)
+    + (sigma_1**2 + (mu_1 - mu_2) ** 2) / (2 * sigma_2**2)
+    - 1 / 2
+  )
+
+
 def visualize_sample_img(loader):
   images, labels = next(iter(loader))
   first_img = images[0].reshape(28, 28)
@@ -41,10 +49,10 @@ def visualize_sample_img(loader):
 
 def plot_samples(generative_model):
   axes = plt.subplots(1, 10, figsize=(10, 1))[1]
-  for i in range(10):
-    sample = generative_model.sample().reshape(28, 28)
-    axes[i].imshow(sample, cmap='gray')
-    axes[i].axis('off')
+  for d in range(10):
+    sample = generative_model.sample(d).reshape(28, 28)
+    axes[d].imshow(sample, cmap='gray')
+    axes[d].axis('off')
   plt.show()
 
 
