@@ -95,7 +95,7 @@ class Vae(nn.Module):
       train_loss, train_acc = self.train_epoch(train_loader, opt)
       test_loss, test_acc = self.test_run(test_loader)
       pbar.set_description(
-        f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f}'
+        f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f} train acc {train_acc:.4f} test acc {test_acc:.4f}'
       )
 
   @torch.no_grad()
