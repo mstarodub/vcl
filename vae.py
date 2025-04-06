@@ -7,7 +7,7 @@ from tqdm.auto import trange
 import util
 from util import torch_device
 import dataloaders
-from accuracy import classifier_uncertainty
+import accuracy
 
 
 class Vae(nn.Module):
@@ -67,7 +67,7 @@ class Vae(nn.Module):
       opt.zero_grad()
       gen, mu, log_sigma = self(data)
       loss = -self.elbo(mu, log_sigma, gen, data)
-      uncert = classifier_uncertainty(self.classifier, gen, target)
+      uncert = self.classifier.classifier_uncertainty(gen, target)
       loss.backward()
       opt.step()
       losses.append(loss.item())
@@ -84,7 +84,7 @@ class Vae(nn.Module):
       data, target = data.to(device), target.to(device)
       gen, mu, log_sigma = self(data)
       loss = -self.elbo(mu, log_sigma, gen, data)
-      uncert = classifier_uncertainty(self.classifier, gen, target)
+      uncert = self.classifier.classifier_uncertainty(gen, target)
       losses.append(loss.item())
       uncertainties.append(uncert.item())
     return np.mean(losses), np.mean(uncertainties)
@@ -105,7 +105,14 @@ class Vae(nn.Module):
     return self.decoder(z)
 
 
-def baseline_generative_model(num_epochs, classifier):
+def baseline_generative_model(num_epochs, problem):
+  loaders = None
+  if problem == 'mnist':
+    loaders = dataloaders.mnist_vanilla_task_loaders(batch_size=128)
+  if problem == 'nmnist':
+    loaders = dataloaders.nmnist_vanilla_task_loaders(batch_size=128)
+  classifier = accuracy.init_classifier(problem)
+
   model = Vae(
     in_dim=28 * 28,
     hidden_dim=500,
@@ -113,7 +120,8 @@ def baseline_generative_model(num_epochs, classifier):
     learning_rate=1e-3,
     classifier=classifier,
   ).to(torch_device())
-  train_loader, test_loader = dataloaders.mnist_vanilla_task_loaders(batch_size=128)
+
+  train_loader, test_loader = loaders
   model.train_run(train_loader, test_loader, num_epochs=num_epochs)
   util.plot_reconstructions(model, test_loader, multihead=False)
   util.plot_samples(model, multihead=False)

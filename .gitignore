@@ -1,4 +1,5 @@
 .DS_Store
+*.pt
 __marimo__/
 wandb/
 data/

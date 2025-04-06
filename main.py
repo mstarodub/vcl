@@ -1,10 +1,7 @@
-import torch
 import wandb
 
 import vae
 import util
-import accuracy
-import dataloaders
 from vcl_gen import generative_model_pipeline
 from vcl_disc import discriminative_model_pipeline
 
@@ -126,14 +123,6 @@ if __name__ == '__main__':
   # model = model_pipeline(ddm_pmnist_run, wandb_log=True)
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
-
-  csf = accuracy.CNNEnsembleClassifier()
-  csf.load_state_dict(torch.load('classifier.pt', map_location=util.torch_device()))
-  csf.to(util.torch_device())
-  # csf_train_loader, csf_test_loader = dataloaders.mnist_vanilla_task_loaders(256)
-  # csf.train_run(csf_train_loader, csf_test_loader, num_epochs=30)
-  # torch.save(csf.state_dict(), 'classifier.pt')
-
-  model = vae.baseline_generative_model(num_epochs=20, classifier=csf)
+  model = vae.baseline_generative_model(num_epochs=20, problem='mnist')
   # model = model_pipeline(dgm_mnist_run, wandb_log=True)
   # model = model_pipeline(dgm_nmnist_run, wandb_log=False)

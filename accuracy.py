@@ -3,7 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from tqdm.auto import trange
+import os
 
+import dataloaders
 from util import torch_device
 
 
@@ -86,15 +88,37 @@ class CNNEnsembleClassifier(nn.Module):
         f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f} train acc {train_acc:.4f} test acc {test_acc:.4f}'
       )
 
+  @torch.no_grad()
+  def classifier_uncertainty(self, gen, target):
+    logits = self(gen)
+    eps = 1e-8
+    probs = F.softmax(logits, dim=1).clamp(min=eps)
+    one_hot = F.one_hot(target, num_classes=10).float()
+    # D_KL(one-hot || predicted)
+    return F.kl_div(probs.log(), one_hot, reduction='batchmean')
 
-@torch.no_grad()
-def classifier_uncertainty(classifier, gen, target):
-  logits = classifier(gen)
-  eps = 1e-8
-  probs = F.softmax(logits, dim=1).clamp(min=eps)
-  one_hot = F.one_hot(target, num_classes=10).float()
-  # D_KL(one-hot || predicted)
-  return F.kl_div(probs.log(), one_hot, reduction='batchmean')
+
+def init_classifier(problem, num_epochs=30, batch_size=256):
+  device = torch_device()
+  csf = accuracy.CNNEnsembleClassifier()
+
+  csf_path, csf_loaders = None, None
+  if problem == 'mnist':
+    csf_path = 'classifier_mnist.pt'
+    csf_loaders = dataloaders.mnist_vanilla_task_loaders(batch_size)
+  if problem == 'nmnist':
+    csf_path = 'classifier_nmnist.pt'
+    csf_loaders = dataloaders.nmnist_vanilla_task_loaders(batch_size)
+
+  if os.path.exists(csf_path):
+    # .to(device) is inplace for nn.Module (but not for tensors!)
+    csf.load_state_dict(torch.load(csf_path, map_location=device)).to(device)
+  else:
+    csf.to(device)
+    csf.train_run(*csf_loaders, num_epochs=num_epochs)
+    torch.save(csf.state_dict(), csf_path)
+
+  return csf
 
 
 def accuracy(pred, target):

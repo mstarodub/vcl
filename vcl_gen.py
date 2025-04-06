@@ -7,9 +7,9 @@ from tqdm.auto import tqdm, trange
 from itertools import chain
 
 import dataloaders
+import accuracy
 import util
 from util import torch_device
-from accuracy import classifier_uncertainty
 from bayesian_layer import BayesianLinear
 
 
@@ -129,7 +129,7 @@ class Dgm(nn.Module):
       self.zero_grad()
       # TODO: no bayesian sampling for now
       gen, mu, log_sigma = self(orig, ta)
-      uncert = classifier_uncertainty(self.classifier, gen, ta)
+      uncert = self.classifier.classifier_uncertainty(gen, ta)
       loss = -self.elbo(mu, log_sigma, gen, orig) + self.compute_kl() / len(
         loader.dataset
       )
@@ -165,7 +165,7 @@ class Dgm(nn.Module):
         orig, ta = orig.to(device), ta.to(device)
         # TODO: no bayesian sampling for now
         gen, mu, log_sigma = self(orig, ta)
-        uncert = classifier_uncertainty(self.classifier, gen, ta)
+        uncert = self.classifier.classifier_uncertainty(gen, ta)
         task_uncertainties.append(uncert.item())
       task_uncertainty = np.mean(task_uncertainties)
       wandb.log({'task': task, f'test_uncert_task_{test_task}': task_uncertainty})
@@ -188,13 +188,12 @@ class Dgm(nn.Module):
 
 
 def generative_model_pipeline(params):
-  loaders, classifier = None, None
+  loaders = None
   if params.problem == 'mnist':
     loaders = dataloaders.mnist_cont_task_loaders(params.batch_size)
-    classifier = None
   if params.problem == 'nmnist':
     loaders = dataloaders.nmnist_cont_task_loaders(params.batch_size)
-    classifier = None
+  classifier = accuracy.init_classifier(params.problem)
 
   model = Dgm(
     in_dim=params.in_dim,
