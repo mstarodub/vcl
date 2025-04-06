@@ -2,8 +2,9 @@ import wandb
 
 import vae
 import util
-from vcl_gen import generative_model_pipeline
-from vcl_disc import discriminative_model_pipeline
+from vcl_gen import generative_model_pipeline as vcl_generative_model_pipeline
+from vcl_disc import discriminative_model_pipeline as vcl_discriminative_model_pipeline
+from si_disc import discriminative_model_pipeline as si_discriminative_model_pipeline
 
 
 def model_pipeline(params, wandb_log=True):
@@ -11,10 +12,14 @@ def model_pipeline(params, wandb_log=True):
   with wandb.init(project='vcl', config=params, mode=wandb_mode):
     params = wandb.config
     model = None
-    if params.experiment == 'discriminative':
-      model = discriminative_model_pipeline(params)
-    if params.experiment == 'generative':
-      model = generative_model_pipeline(params)
+    if params.model == 'vcl':
+      if params.experiment == 'discriminative':
+        model = vcl_discriminative_model_pipeline(params)
+      if params.experiment == 'generative':
+        model = vcl_generative_model_pipeline(params)
+    if params.model == 'si':
+      if params.experiment == 'discriminative':
+        model = si_discriminative_model_pipeline(params)
   return model
 
 
@@ -95,9 +100,9 @@ if __name__ == '__main__':
     latent_dim=50,
     ntasks=10,
     # 200
-    epochs=100,
+    epochs=20,
     # 50
-    batch_size=128,
+    batch_size=256,
     layer_init_std=None,
     # 1e-4
     learning_rate=1e-3,
@@ -112,7 +117,7 @@ if __name__ == '__main__':
     latent_dim=50,
     ntasks=10,
     epochs=400,
-    batch_size=64,
+    batch_size=256,
     layer_init_std=None,
     learning_rate=1e-4,
     problem='nmnist',
@@ -120,9 +125,69 @@ if __name__ == '__main__':
     model='vcl',
   )
 
+  dsi_pmnist_run = dict(
+    in_dim=28 * 28,
+    hidden_dim=100,
+    out_dim=10,
+    hidden_layers=2,
+    ntasks=10,
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.1,
+    xi=0.1,
+    per_task_opt=False,
+    multihead=False,
+    problem='pmnist',
+    experiment='discriminative',
+    model='si',
+  )
+
+  dsi_smnist_run = dict(
+    in_dim=28 * 28,
+    hidden_dim=256,
+    out_dim=10,
+    hidden_layers=2,
+    ntasks=5,
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.1,
+    xi=0.1,
+    per_task_opt=True,
+    multihead=True,
+    problem='smnist',
+    experiment='discriminative',
+    model='si',
+  )
+
+  dsi_nmnist_run = dict(
+    in_dim=28 * 28,
+    hidden_dim=150,
+    out_dim=10,
+    hidden_layers=4,
+    ntasks=5,
+    epochs=50,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.1,
+    xi=0.1,
+    per_task_opt=True,
+    multihead=True,
+    problem='nmnist',
+    experiment='discriminative',
+    model='si',
+  )
+
   # model = model_pipeline(ddm_pmnist_run, wandb_log=True)
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
-  model = vae.baseline_generative_model(num_epochs=20, problem='mnist')
+
+  # model = vae.baseline_generative_model(num_epochs=20, problem='mnist')
+
   # model = model_pipeline(dgm_mnist_run, wandb_log=True)
   # model = model_pipeline(dgm_nmnist_run, wandb_log=False)
+
+  # model = model_pipeline(dsi_pmnist_run, wandb_log=True)
+  # model = model_pipeline(dsi_smnist_run, wandb_log=True)
+  model = model_pipeline(dsi_nmnist_run, wandb_log=True)

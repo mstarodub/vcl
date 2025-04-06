@@ -51,6 +51,7 @@ class Dgm(nn.Module):
       BayesianLinear(hidden_dim, hidden_dim, layer_init_std),
       nn.ReLU(),
     )
+    # TODO: try classical head.
     self.decoder_heads = nn.ModuleList(
       nn.Sequential(
         BayesianLinear(hidden_dim, hidden_dim, layer_init_std),
@@ -67,7 +68,8 @@ class Dgm(nn.Module):
       layer
       for layer in list(self.decoder_shared)
       # list of modulelists
-      + list(chain.from_iterable(self.decoder_heads))
+      # XXX
+      # + list(chain.from_iterable(self.decoder_heads))
       if isinstance(layer, BayesianLinear)
     ]
 
@@ -112,12 +114,15 @@ class Dgm(nn.Module):
     z, mu, log_sigma = self.encode(x, task)
     return self.decode(z, task), mu, log_sigma
 
+  # we don't scale this by the batch_size, instead one should change learning_rate
   def elbo(self, mu, log_sigma, gen, orig):
-    reconstr_likelihood = -F.mse_loss(gen, orig, reduction='mean')
+    reconstr_likelihood = -F.binary_cross_entropy(gen, orig, reduction='mean')
     kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
     return reconstr_likelihood - kl_loss
 
   def compute_kl(self):
+    # TODO: this should only include the shared parts - same bug in vcl discriminative!
+    # it only works because we dont change the prior - this is accidental L2 reg on the heads
     return sum(layer.kl_layer() for layer in self.bayesian_layers)
 
   def train_epoch(self, loader, opt, task, epoch):
@@ -152,6 +157,8 @@ class Dgm(nn.Module):
       for epoch in trange(num_epochs, desc=f'task {task}'):
         self.train_epoch(train_loader, opt, task, epoch)
       self.test_run(test_loaders, task)
+      # TODO log some images
+      util.plot_reconstructions(self, test_loaders[task], multihead=True)
 
   @torch.no_grad()
   def test_run(self, loaders, task):

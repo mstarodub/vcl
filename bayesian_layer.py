@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from util import torch_device, kl_div_gaussians
+import util
 
 
 class BayesianLinear(nn.Module):
   def __init__(self, in_dim, out_dim, init_std):
     super().__init__()
+    device = util.torch_device()
     self.in_dim = in_dim
     self.out_dim = out_dim
 
@@ -33,10 +34,10 @@ class BayesianLinear(nn.Module):
     assert init_b.size(dim=0) == out_dim
 
     # priors
-    self.prior_mu_w = torch.zeros_like(self.mu_w, device=torch_device())
-    self.prior_sigma_w = torch.ones_like(self.log_sigma_w, device=torch_device())
-    self.prior_mu_b = torch.zeros_like(self.mu_b, device=torch_device())
-    self.prior_sigma_b = torch.ones_like(self.log_sigma_b, device=torch_device())
+    self.prior_mu_w = torch.zeros_like(self.mu_w, device=device)
+    self.prior_sigma_w = torch.ones_like(self.log_sigma_w, device=device)
+    self.prior_mu_b = torch.zeros_like(self.mu_b, device=device)
+    self.prior_sigma_b = torch.ones_like(self.log_sigma_b, device=device)
 
   def forward(self, x):
     mu_out = F.linear(x, self.mu_w, self.mu_b)
@@ -48,8 +49,8 @@ class BayesianLinear(nn.Module):
     return mu_out + sigma_out * eps
 
   def kl_layer(self):
-    return kl_div_gaussians(
+    return util.kl_div_gaussians(
       self.mu_w, torch.exp(self.log_sigma_w), self.prior_mu_w, self.prior_sigma_w
-    ) + kl_div_gaussians(
+    ) + util.kl_div_gaussians(
       self.mu_b, torch.exp(self.log_sigma_b), self.prior_mu_b, self.prior_sigma_b
     )

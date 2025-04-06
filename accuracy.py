@@ -100,7 +100,7 @@ class CNNEnsembleClassifier(nn.Module):
 
 def init_classifier(problem, num_epochs=30, batch_size=256):
   device = torch_device()
-  csf = accuracy.CNNEnsembleClassifier()
+  csf = CNNEnsembleClassifier()
 
   csf_path, csf_loaders = None, None
   if problem == 'mnist':
@@ -112,7 +112,8 @@ def init_classifier(problem, num_epochs=30, batch_size=256):
 
   if os.path.exists(csf_path):
     # .to(device) is inplace for nn.Module (but not for tensors!)
-    csf.load_state_dict(torch.load(csf_path, map_location=device)).to(device)
+    csf.load_state_dict(torch.load(csf_path, map_location=device))
+    csf.to(device)
   else:
     csf.to(device)
     csf.train_run(*csf_loaders, num_epochs=num_epochs)
