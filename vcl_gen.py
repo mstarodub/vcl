@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 import wandb
 from tqdm.auto import tqdm, trange
+from torchvision.utils import make_grid
 from itertools import chain
 
 import dataloaders
@@ -28,6 +29,7 @@ class Dgm(nn.Module):
   ):
     super().__init__()
     self.logging_every = logging_every
+    self.ntasks = ntasks
     self.batch_size = batch_size
     self.classifier = classifier
     self.learning_rate = learning_rate
@@ -68,7 +70,7 @@ class Dgm(nn.Module):
       layer
       for layer in list(self.decoder_shared)
       # list of modulelists
-      # XXX
+      # TODO
       # + list(chain.from_iterable(self.decoder_heads))
       if isinstance(layer, BayesianLinear)
     ]
@@ -125,6 +127,10 @@ class Dgm(nn.Module):
     # it only works because we dont change the prior - this is accidental L2 reg on the heads
     return sum(layer.kl_layer() for layer in self.bayesian_layers)
 
+  def update_prior(self):
+    for layer in self.bayesian_layers:
+      layer.update_prior_layer()
+
   def train_epoch(self, loader, opt, task, epoch):
     self.train()
     device = torch_device()
@@ -152,13 +158,22 @@ class Dgm(nn.Module):
   def train_test_run(self, tasks, num_epochs):
     self.train()
     wandb.watch(self, log_freq=100)
+    cumulative_img_samples = []
     for task, (train_loader, test_loaders) in enumerate(tasks):
       opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
       for epoch in trange(num_epochs, desc=f'task {task}'):
         self.train_epoch(train_loader, opt, task, epoch)
       self.test_run(test_loaders, task)
-      # TODO log some images
-      util.plot_reconstructions(self, test_loaders[task], multihead=True)
+      self.update_prior()
+      img_samples = util.samples(self, upto_task=task, multihead=True)
+      img_recons = util.reconstructions(
+        self, test_loaders, upto_task=task, multihead=True
+      )
+      self.wandb_log_images_collect(
+        task, img_samples, img_recons, cumulative_img_samples
+      )
+    final_grid = make_grid(cumulative_img_samples, nrow=1, padding=0)
+    wandb.log({'cumulative_samples': wandb.Image(final_grid)})
 
   @torch.no_grad()
   def test_run(self, loaders, task):
@@ -193,6 +208,25 @@ class Dgm(nn.Module):
           )
     wandb.log(metrics)
 
+  def wandb_log_images_collect(
+    self, task, img_samples, img_recons, cumulative_img_samples
+  ):
+    metrics = {
+      'samples': wandb.Image(img_samples, caption=f'task {task}'),
+      'recons': wandb.Image(img_recons, caption=f'task {task}'),
+    }
+    wandb.log(metrics)
+    cumulative_img_samples.append(
+      torch.cat(
+        [
+          img_samples,
+          torch.zeros(img_samples.shape[0], 28, (self.ntasks - task - 1) * 28),
+        ],
+        # (C, H, W)
+        dim=2,
+      )
+    )
+
 
 def generative_model_pipeline(params):
   loaders = None
@@ -214,7 +248,4 @@ def generative_model_pipeline(params):
   ).to(torch_device())
 
   model.train_test_run(loaders, num_epochs=params.epochs)
-  mixed_test_loader = dataloaders.mnist_vanilla_task_loaders(batch_size=128)[1]
-  util.plot_reconstructions(model, mixed_test_loader, multihead=True)
-  util.plot_samples(model, multihead=True)
   return model

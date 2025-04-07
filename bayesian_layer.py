@@ -54,3 +54,15 @@ class BayesianLinear(nn.Module):
     ) + util.kl_div_gaussians(
       self.mu_b, torch.exp(self.log_sigma_b), self.prior_mu_b, self.prior_sigma_b
     )
+
+  def update_prior_layer(self):
+    self.prior_mu_w = self.mu_w.clone().detach()
+    self.prior_sigma_w = torch.exp(self.log_sigma_w.clone().detach())
+    self.prior_mu_b = self.mu_b.clone().detach()
+    self.prior_sigma_b = torch.exp(self.log_sigma_b.clone().detach())
+
+  def restore_from_prior_layer(self):
+    self.mu_w.data = self.prior_mu_w.clone().detach()
+    self.log_sigma_w.data = torch.log(self.prior_sigma_w.clone().detach())
+    self.mu_b.data = self.prior_mu_b.clone().detach()
+    self.log_sigma_b.data = torch.log(self.prior_sigma_b.clone().detach())

@@ -123,6 +123,5 @@ def baseline_generative_model(num_epochs, problem):
 
   train_loader, test_loader = loaders
   model.train_run(train_loader, test_loader, num_epochs=num_epochs)
-  util.plot_reconstructions(model, test_loader, multihead=False)
-  util.plot_samples(model, multihead=False)
+  util.show_imgs(util.samples(model, upto_task=9, multihead=False))
   return model

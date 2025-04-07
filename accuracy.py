@@ -103,12 +103,12 @@ def init_classifier(problem, num_epochs=30, batch_size=256):
   device = torch_device()
   csf = CNNEnsembleClassifier()
 
-  csf_path, csf_loaders = None, None
+  csf_path, csf_loaders = 'pretrained/classifier_', None
   if problem == 'mnist':
-    csf_path = 'classifier_mnist.pt'
+    csf_path += 'mnist.pt'
     csf_loaders = dataloaders.mnist_vanilla_task_loaders(batch_size)
   if problem == 'nmnist':
-    csf_path = 'classifier_nmnist.pt'
+    csf_path += 'nmnist.pt'
     csf_loaders = dataloaders.nmnist_vanilla_task_loaders(batch_size)
 
   if os.path.exists(csf_path):

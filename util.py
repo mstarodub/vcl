@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+from torchvision.utils import make_grid
 
 
 def torch_version():
@@ -37,40 +38,80 @@ def kl_div_gaussians(mu_1, sigma_1, mu_2, sigma_2):
   )
 
 
-def visualize_sample_img(loader):
-  images, labels = next(iter(loader))
-  first_img = images[0].reshape(28, 28)
-  plt.figure(figsize=(1, 1))
-  plt.imshow(first_img, cmap='gray')
-  plt.title(labels[0].item())
-  plt.axis('off')
+def show_imgs(imgs):
+  # single flattened image (784,)
+  if torch.is_tensor(imgs) and imgs.ndim == 1 and imgs.shape[0] == 784:
+    grid = [[imgs.reshape(28, 28)]]
+  # single non-flattened image (from torchvision.utils.make_grid)
+  # need to move channels to last axis for imshow
+  elif torch.is_tensor(imgs):
+    grid = [[imgs.permute(1, 2, 0)]]
+  # list of flattened images
+  elif (
+    isinstance(imgs, list)
+    and torch.is_tensor(imgs[0])
+    and imgs[0].ndim == 1
+    and imgs[0].shape[0] == 784
+  ):
+    grid = [[img.reshape(28, 28) for img in imgs]]
+  # list containing two batches of flattened images where each batch: (x, 784)
+  elif (
+    isinstance(imgs, list)
+    and torch.is_tensor(imgs[0])
+    and imgs[0].ndim == 2
+    and imgs[0].shape[1] == 784
+  ):
+    grid = [[img.reshape(28, 28) for img in batch] for batch in imgs]
+  else:
+    raise ValueError('unsupported input format')
+
+  rows, cols = len(grid), len(grid[0])
+  fig, axes = plt.subplots(rows, cols, figsize=(cols, rows), squeeze=False)
+  for i in range(rows):
+    for j in range(cols):
+      axes[i][j].imshow(grid[i][j], cmap='gray')
+      axes[i][j].axis('off')
+  plt.tight_layout()
   plt.show()
 
 
-def plot_samples(generative_model, multihead):
+def samples(generative_model, upto_task, multihead):
   device = torch_device()
-  axes = plt.subplots(1, 10, figsize=(10, 1))[1]
-  for d in range(10):
+  images = []
+  for t in range(upto_task + 1):
     if multihead:
-      sample = generative_model.sample(torch.tensor([d], device=device)).reshape(28, 28)
+      gen = generative_model.sample(torch.tensor([t], device=device))
     else:
-      sample = generative_model.sample().reshape(28, 28)
-    axes[d].imshow(sample.cpu(), cmap='gray')
-    axes[d].axis('off')
-  plt.show()
+      gen = generative_model.sample()
+    images.append(gen.reshape(1, 28, 28))
+  img = make_grid(images, nrow=10, padding=0).cpu()
+  # show_imgs(img)
+  return img
 
 
 @torch.no_grad()
-def plot_reconstructions(generative_model, loader, multihead):
+def reconstructions(generative_model, loaders, upto_task, multihead):
   device = torch_device()
   generative_model.eval()
-  data, task = next(iter(loader))
-  data, task = data[:10], task[:10]
-  data, task = data.to(device), task.to(device)
-  recon, _, _ = generative_model(data, task) if multihead else generative_model(data)
-  axes = plt.subplots(2, 10, figsize=(10, 2))[1]
-  for i in range(10):
-    axes[0, i].imshow(data[i].cpu().reshape(28, 28), cmap='gray')
-    axes[0, i].axis('off')
-    axes[1, i].imshow(recon[i].cpu().reshape(28, 28), cmap='gray')
-    axes[1, i].axis('off')
+  origs, recons = [], []
+  for t in range(upto_task + 1):
+    loader = loaders[t]
+    data, task = next(iter(loader))
+    data, task = data[0:1].to(device), task[0:1].to(device)
+    recon, _, _ = generative_model(data, task) if multihead else generative_model(data)
+    origs.append(data)
+    recons.append(recon)
+  origs = torch.cat(origs, dim=0)
+  recons = torch.cat(recons, dim=0)
+  img = make_grid(
+    torch.cat(
+      [
+        origs.reshape(upto_task + 1, 1, 28, 28),
+        recons.reshape(upto_task + 1, 1, 28, 28),
+      ]
+    ),
+    nrow=upto_task + 1,
+    padding=0,
+  ).cpu()
+  # show_imgs(img)
+  return img

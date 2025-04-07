@@ -100,7 +100,7 @@ if __name__ == '__main__':
     latent_dim=50,
     ntasks=10,
     # 200
-    epochs=20,
+    epochs=5,
     # 50
     batch_size=256,
     layer_init_std=None,
@@ -116,7 +116,8 @@ if __name__ == '__main__':
     hidden_dim=500,
     latent_dim=50,
     ntasks=10,
-    epochs=400,
+    # 400
+    epochs=1,
     batch_size=256,
     layer_init_std=None,
     learning_rate=1e-4,
@@ -183,10 +184,10 @@ if __name__ == '__main__':
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
 
-  # model = vae.baseline_generative_model(num_epochs=20, problem='mnist')
+  model = baseline_generative_model(num_epochs=5, problem='mnist')
 
   # model = model_pipeline(dgm_mnist_run, wandb_log=True)
-  model = model_pipeline(dgm_nmnist_run, wandb_log=False)
+  # model = model_pipeline(dgm_nmnist_run, wandb_log=False)
 
   # model = model_pipeline(dsi_pmnist_run, wandb_log=True)
   # model = model_pipeline(dsi_smnist_run, wandb_log=True)

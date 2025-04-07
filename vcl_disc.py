@@ -76,17 +76,11 @@ class Ddm(nn.Module):
 
   def update_prior(self):
     for layer in self.bayesian_layers:
-      layer.prior_mu_w = layer.mu_w.clone().detach()
-      layer.prior_sigma_w = torch.exp(layer.log_sigma_w.clone().detach())
-      layer.prior_mu_b = layer.mu_b.clone().detach()
-      layer.prior_sigma_b = torch.exp(layer.log_sigma_b.clone().detach())
+      layer.update_prior_layer()
 
   def restore_from_prior(self):
     for layer in self.bayesian_layers:
-      layer.mu_w.data = layer.prior_mu_w.clone().detach()
-      layer.log_sigma_w.data = torch.log(layer.prior_sigma_w.clone().detach())
-      layer.mu_b.data = layer.prior_mu_b.clone().detach()
-      layer.log_sigma_b.data = torch.log(layer.prior_sigma_b.clone().detach())
+      layer.restore_from_prior_layer()
 
   def compute_kl(self):
     # notice that the gradients of the unused heads are zeroed and hence the KL terms are zero too
