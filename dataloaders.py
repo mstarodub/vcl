@@ -101,6 +101,32 @@ def mnist_vanilla_task_loaders(batch_size):
   return train_loader, test_loader
 
 
+def nmnist_vanilla_task_loaders(batch_size):
+  train_part = 0.8
+  notmnist_data = datasets.ImageFolder(
+    './data/notMNIST_small',
+    transform=transform(),
+  )
+  train_subset, test_subset = torch.utils.data.random_split(
+    notmnist_data, [train_part, 1 - train_part]
+  )
+  train_idx = torch.tensor(train_subset.indices)
+  test_idx = torch.tensor(test_subset.indices)
+  train_loader = torch.utils.data.DataLoader(
+    torch.utils.data.Subset(notmnist_data, train_idx),
+    batch_size=batch_size if batch_size else max(1, len(train_idx)),
+    shuffle=True,
+    num_workers=12 if torch.cuda.is_available() else 0,
+  )
+  test_loader = torch.utils.data.DataLoader(
+    torch.utils.data.Subset(notmnist_data, test_idx),
+    batch_size=batch_size if batch_size else max(1, len(test_idx)),
+    shuffle=True,
+    num_workers=12 if torch.cuda.is_available() else 0,
+  )
+  return train_loader, test_loader
+
+
 def mnist_cont_task_loaders(batch_size):
   loaders, cumulative_test_loaders = [], []
   train_ds = datasets.MNIST(

@@ -185,8 +185,8 @@ if __name__ == '__main__':
 
   # model = vae.baseline_generative_model(num_epochs=20, problem='mnist')
 
-  model = model_pipeline(dgm_mnist_run, wandb_log=True)
-  # model = model_pipeline(dgm_nmnist_run, wandb_log=False)
+  # model = model_pipeline(dgm_mnist_run, wandb_log=True)
+  model = model_pipeline(dgm_nmnist_run, wandb_log=False)
 
   # model = model_pipeline(dsi_pmnist_run, wandb_log=True)
   # model = model_pipeline(dsi_smnist_run, wandb_log=True)
