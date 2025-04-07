@@ -133,7 +133,12 @@ class Dsi(nn.Module):
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and data.shape[0] == self.batch_size:
-        metrics = {'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc}
+        metrics = {
+          'task': task,
+          'epoch': epoch,
+          'train/train_loss': loss,
+          'train/train_acc': acc,
+        }
         wandb.log(metrics)
 
       for layer in self.linear_layers:
@@ -171,9 +176,9 @@ class Dsi(nn.Module):
         acc = accuracy(pred, target)
         task_accuracies.append(acc.item())
       task_accuracy = np.mean(task_accuracies)
-      wandb.log({'task': task, f'test_acc_task_{test_task}': task_accuracy})
+      wandb.log({'task': task, f'test/test_acc_task_{test_task}': task_accuracy})
       avg_accuracies.append(task_accuracy)
-    wandb.log({'task': task, 'test_acc': np.mean(avg_accuracies)})
+    wandb.log({'task': task, 'test/test_acc': np.mean(avg_accuracies)})
 
 
 def discriminative_model_pipeline(params, wandb_log=True):

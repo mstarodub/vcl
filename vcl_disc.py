@@ -112,13 +112,17 @@ class Ddm(nn.Module):
     return -F.cross_entropy(pred, target)
 
   def wandb_log(self, metrics):
-    for bli, bl in enumerate(self.shared):
+    bli = 0
+    for bl in self.shared:
       if isinstance(bl, BayesianLinear):
-        metrics[f's_{bli}_sigma_w'] = (
+        metrics[f'sigma/s_{bli}_sigma_w'] = (
           torch.std(torch.exp(bl.log_sigma_w)).detach().item()
         )
-    for hli, hl in enumerate(self.heads):
-      metrics[f'h_{hli}_sigma_w'] = torch.std(torch.exp(hl.log_sigma_w)).detach().item()
+        bli += 1
+    for hi, hl in enumerate(self.heads):
+      metrics[f'sigma/h_{hi}_sigma_w'] = (
+        torch.std(torch.exp(hl.log_sigma_w)).detach().item()
+      )
     wandb.log(metrics)
 
   # sample from (D_t) \cup C_{t-1}
@@ -207,7 +211,12 @@ class Ddm(nn.Module):
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and data.shape[0] == self.batch_size:
-        metrics = {'task': task, 'epoch': epoch, 'train_loss': loss, 'train_acc': acc}
+        metrics = {
+          'task': task,
+          'epoch': epoch,
+          'train/train_loss': loss,
+          'train/train_acc': acc,
+        }
         self.wandb_log(metrics)
 
   def train_test_run(self, tasks, num_epochs):
@@ -270,9 +279,9 @@ class Ddm(nn.Module):
         acc = accuracy(mean_pred, target)
         task_accuracies.append(acc.item())
       task_accuracy = np.mean(task_accuracies)
-      wandb.log({'task': task, f'test_acc_task_{test_task}': task_accuracy})
+      wandb.log({'task': task, f'test/test_acc_task_{test_task}': task_accuracy})
       avg_accuracies.append(task_accuracy)
-    wandb.log({'task': task, 'test_acc': np.mean(avg_accuracies)})
+    wandb.log({'task': task, 'test/test_acc': np.mean(avg_accuracies)})
 
 
 def discriminative_model_pipeline(params, wandb_log=True):

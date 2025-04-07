@@ -150,8 +150,8 @@ class Dgm(nn.Module):
         metrics = {
           'task': task,
           'epoch': epoch,
-          'train_loss': loss,
-          'train_uncert': uncert,
+          'train/train_loss': loss,
+          'train/train_uncert': uncert,
         }
         self.wandb_log(metrics)
 
@@ -173,7 +173,7 @@ class Dgm(nn.Module):
         task, img_samples, img_recons, cumulative_img_samples
       )
     final_grid = make_grid(cumulative_img_samples, nrow=1, padding=0)
-    wandb.log({'cumulative_samples': wandb.Image(final_grid)})
+    wandb.log({'task': task, 'cumulative_samples': wandb.Image(final_grid)})
 
   @torch.no_grad()
   def test_run(self, loaders, task):
@@ -190,28 +190,33 @@ class Dgm(nn.Module):
         uncert = self.classifier.classifier_uncertainty(gen, ta)
         task_uncertainties.append(uncert.item())
       task_uncertainty = np.mean(task_uncertainties)
-      wandb.log({'task': task, f'test_uncert_task_{test_task}': task_uncertainty})
+      wandb.log({'task': task, f'test/test_uncert_task_{test_task}': task_uncertainty})
       avg_uncertainties.append(task_uncertainty)
-    wandb.log({'task': task, 'test_uncert': np.mean(avg_uncertainties)})
+    wandb.log({'task': task, 'test/test_uncert': np.mean(avg_uncertainties)})
 
   def wandb_log(self, metrics):
-    for bli, bl in enumerate(self.decoder_shared):
-      if isinstance(bl, BayesianLinear):
-        metrics[f's_{bli}_sigma_w'] = (
-          torch.std(torch.exp(bl.log_sigma_w)).detach().item()
+    sli = 0
+    for sl in self.decoder_shared:
+      if isinstance(sl, BayesianLinear):
+        metrics[f'sigma/s_{sli}_sigma_w'] = (
+          torch.std(torch.exp(sl.log_sigma_w)).detach().item()
         )
+        sli += 1
     for hi, head in enumerate(self.decoder_heads):
-      for hli, hl in enumerate(head):
-        if isinstance(bl, BayesianLinear):
-          metrics[f'h_{hi}_{hli}_sigma_w'] = (
+      hli = 0
+      for hl in head:
+        if isinstance(hl, BayesianLinear):
+          metrics[f'sigma/h_{hi}_{hli}_sigma_w'] = (
             torch.std(torch.exp(hl.log_sigma_w)).detach().item()
           )
+          hli += 1
     wandb.log(metrics)
 
   def wandb_log_images_collect(
     self, task, img_samples, img_recons, cumulative_img_samples
   ):
     metrics = {
+      'task': task,
       'samples': wandb.Image(img_samples, caption=f'task {task}'),
       'recons': wandb.Image(img_recons, caption=f'task {task}'),
     }

@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
+import wandb
 
 
 def torch_version():
@@ -115,3 +116,41 @@ def reconstructions(generative_model, loaders, upto_task, multihead):
   ).cpu()
   # show_imgs(img)
   return img
+
+
+def wandb_setup_axes():
+  # custom x axis
+  wandb.define_metric('task')
+
+  # general metrics
+  for metric in [
+    'test/test_acc',
+    'test/test_uncert',
+    'samples',
+    'recons',
+    'cumulative_samples',
+    # 'epoch',
+    # 'train/train_uncert',
+    # 'train/train_loss',
+    # 'train/train_acc',
+  ]:
+    wandb.define_metric(metric, step_metric='task')
+
+  # heads and per-task stats
+  # vcl_disc: hi = 0,...,ntasks-1
+  # vcl_gen: hi: 0,...,ntasks-1, hli: 0,1
+  max_ntasks = 10
+  for task in range(max_ntasks):
+    wandb.define_metric(f'test/test_acc_task_{task}', step_metric='task')
+    wandb.define_metric(f'test/test_uncert_task_{task}', step_metric='task')
+    # wandb.define_metric(f'sigma/h_{task}_sigma_w', step_metric='task')
+    # wandb.define_metric(f'sigma/h_{task}_{0}_sigma_w', step_metric='task')
+    # wandb.define_metric(f'sigma/h_{task}_{1}_sigma_w', step_metric='task')
+
+  # shared layers
+  # vcl_disc: 0,...,self.hidden_layers-1
+  # vcl_gen: 0,1
+  max_hidden_layers = 4
+  for sli in range(max_hidden_layers):
+    # wandb.define_metric(f'sigma/s_{sli}_sigma_w', step_metric='task')
+    pass

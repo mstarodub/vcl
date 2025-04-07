@@ -11,6 +11,8 @@ def model_pipeline(params, wandb_log=True):
   wandb_mode = 'online' if wandb_log else 'disabled'
   with wandb.init(project='vcl', config=params, mode=wandb_mode):
     params = wandb.config
+    util.wandb_setup_axes()
+
     model = None
     if params.model == 'vcl':
       if params.experiment == 'discriminative':
@@ -117,10 +119,11 @@ if __name__ == '__main__':
     latent_dim=50,
     ntasks=10,
     # 400
-    epochs=1,
+    epochs=20,
     batch_size=256,
     layer_init_std=None,
-    learning_rate=1e-4,
+    # 1e-4
+    learning_rate=1e-3,
     problem='nmnist',
     experiment='generative',
     model='vcl',
@@ -184,10 +187,10 @@ if __name__ == '__main__':
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
 
-  model = baseline_generative_model(num_epochs=5, problem='mnist')
+  # model = baseline_generative_model(num_epochs=5, problem='mnist')
 
   # model = model_pipeline(dgm_mnist_run, wandb_log=True)
-  # model = model_pipeline(dgm_nmnist_run, wandb_log=False)
+  model = model_pipeline(dgm_nmnist_run, wandb_log=True)
 
   # model = model_pipeline(dsi_pmnist_run, wandb_log=True)
   # model = model_pipeline(dsi_smnist_run, wandb_log=True)
