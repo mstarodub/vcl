@@ -35,17 +35,6 @@ class CNN(nn.Module):
       nn.Dropout(0.4),
       nn.Linear(6272, 10),
     )
-    self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
-    self.bn1 = nn.BatchNorm2d(16)
-    self.conv2 = nn.Conv2d(16, 16, kernel_size=3, padding=1)
-    self.bn2 = nn.BatchNorm2d(16)
-    self.conv3 = nn.Conv2d(16, 16, kernel_size=5, stride=2, padding=2)
-    self.bn3 = nn.BatchNorm2d(16)
-    self.conv4 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
-    self.bn4 = nn.BatchNorm2d(32)
-    self.flatten = nn.Flatten()
-    self.dropout = nn.Dropout(0.4)
-    self.fc = nn.Linear(6272, 10)
 
   def forward(self, x):
     # -1 infers batch size
