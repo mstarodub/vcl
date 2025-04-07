@@ -53,7 +53,6 @@ class Dgm(nn.Module):
       BayesianLinear(hidden_dim, hidden_dim, layer_init_std),
       nn.ReLU(),
     )
-    # TODO: try classical head.
     self.decoder_heads = nn.ModuleList(
       nn.Sequential(
         BayesianLinear(hidden_dim, hidden_dim, layer_init_std),
@@ -69,10 +68,15 @@ class Dgm(nn.Module):
     return [
       layer
       for layer in list(self.decoder_shared)
-      # list of modulelists
-      # TODO
-      # + list(chain.from_iterable(self.decoder_heads))
+      # list of ModuleLists
+      + list(chain.from_iterable(self.decoder_heads))
       if isinstance(layer, BayesianLinear)
+    ]
+
+  @property
+  def shared_bayesian_layers(self):
+    return [
+      layer for layer in list(self.decoder_shared) if isinstance(layer, BayesianLinear)
     ]
 
   def encode(self, x, task):
@@ -123,9 +127,7 @@ class Dgm(nn.Module):
     return reconstr_likelihood - kl_loss
 
   def compute_kl(self):
-    # TODO: this should only include the shared parts - same bug in vcl discriminative!
-    # it only works because we dont change the prior - this is accidental L2 reg on the heads
-    return sum(layer.kl_layer() for layer in self.bayesian_layers)
+    return sum(layer.kl_layer() for layer in self.shared_bayesian_layers)
 
   def update_prior(self):
     for layer in self.bayesian_layers:

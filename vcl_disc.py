@@ -74,6 +74,10 @@ class Ddm(nn.Module):
       self.heads
     )
 
+  @property
+  def shared_bayesian_layers(self):
+    return [layer for layer in self.shared if isinstance(layer, BayesianLinear)]
+
   def update_prior(self):
     for layer in self.bayesian_layers:
       layer.update_prior_layer()
@@ -84,7 +88,7 @@ class Ddm(nn.Module):
 
   def compute_kl(self):
     # notice that the gradients of the unused heads are zeroed and hence the KL terms are zero too
-    return sum(layer.kl_layer() for layer in self.bayesian_layers)
+    return sum(layer.kl_layer() for layer in self.shared_bayesian_layers)
 
   def forward(self, x, task=None):
     x = self.shared(x)
