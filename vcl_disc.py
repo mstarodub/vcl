@@ -290,7 +290,7 @@ class Ddm(nn.Module):
     wandb.log({'task': task, 'test/test_acc': np.mean(avg_accuracies)})
 
 
-def discriminative_model_pipeline(params, wandb_log=True):
+def discriminative_model_pipeline(params):
   loaders, baseline_loaders = None, None
   if params.problem == 'pmnist':
     baseline_loaders = dataloaders.pmnist_task_loaders(params.batch_size)[0]

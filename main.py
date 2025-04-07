@@ -2,9 +2,10 @@ import wandb
 
 import util
 from vae import baseline_generative_model
-from vcl_gen import generative_model_pipeline as vcl_generative_model_pipeline
 from vcl_disc import discriminative_model_pipeline as vcl_discriminative_model_pipeline
+from vcl_gen import generative_model_pipeline as vcl_generative_model_pipeline
 from si_disc import discriminative_model_pipeline as si_discriminative_model_pipeline
+from si_gen import generative_model_pipeline as si_generative_model_pipeline
 
 
 def model_pipeline(params, wandb_log=True):
@@ -22,6 +23,8 @@ def model_pipeline(params, wandb_log=True):
     if params.model == 'si':
       if params.experiment == 'discriminative':
         model = si_discriminative_model_pipeline(params)
+      if params.experiment == 'generative':
+        model = si_generative_model_pipeline(params)
   return model
 
 
@@ -187,15 +190,52 @@ if __name__ == '__main__':
     model='si',
   )
 
+  gsi_mnist_run = dict(
+    in_dim=28 * 28,
+    hidden_dim=500,
+    latent_dim=50,
+    ntasks=10,
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.1,
+    xi=0.1,
+    problem='mnist',
+    experiment='generative',
+    model='si',
+  )
+
+  gsi_nmnist_run = dict(
+    in_dim=28 * 28,
+    hidden_dim=500,
+    latent_dim=50,
+    ntasks=10,
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.1,
+    xi=0.1,
+    problem='nmnist',
+    experiment='generative',
+    model='si',
+  )
+
+  # discriminative
+  # vcl
   # model = model_pipeline(ddm_pmnist_run, wandb_log=True)
   # model = model_pipeline(ddm_smnist_run, wandb_log=True)
   # model = model_pipeline(ddm_nmnist_run, wandb_log=True)
-
-  # model = baseline_generative_model(num_epochs=5, problem='mnist')
-
-  # model = model_pipeline(dgm_mnist_run, wandb_log=True)
-  model = model_pipeline(dgm_nmnist_run, wandb_log=True)
-
+  # si
   # model = model_pipeline(dsi_pmnist_run, wandb_log=True)
   # model = model_pipeline(dsi_smnist_run, wandb_log=True)
   # model = model_pipeline(dsi_nmnist_run, wandb_log=True)
+
+  # generative
+  # vae
+  # model = baseline_generative_model(num_epochs=5, problem='mnist')
+  # vcl
+  # model = model_pipeline(dgm_mnist_run, wandb_log=True)
+  # model = model_pipeline(dgm_nmnist_run, wandb_log=True)
+  # si
+  # model = model_pipeline(gsi_mnist_run, wandb_log=True)
+  model = model_pipeline(gsi_nmnist_run, wandb_log=True)

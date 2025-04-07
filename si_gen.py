@@ -7,12 +7,12 @@ from itertools import chain
 
 import util
 from util import torch_device
-from bayesian_layer import BayesianLinear
+from si_layer import SILayer
 import generative
 from generative import Generative
 
 
-class Dgm(Generative):
+class Gsi(Generative):
   def __init__(
     self,
     in_dim,
@@ -22,9 +22,8 @@ class Dgm(Generative):
     batch_size,
     learning_rate,
     classifier,
-    layer_init_std,
-    bayesian_train_samples,
-    bayesian_test_samples,
+    c,
+    xi,
   ):
     super().__init__(
       latent_dim=latent_dim,
@@ -34,8 +33,8 @@ class Dgm(Generative):
       classifier=classifier,
     )
 
-    self.bayesian_train_samples = bayesian_train_samples
-    self.bayesian_test_samples = bayesian_test_samples
+    self.c = c
+    self.xi = xi
 
     self.encoders = nn.ModuleList(
       nn.Sequential(
@@ -51,44 +50,33 @@ class Dgm(Generative):
     )
 
     self.decoder_shared = nn.Sequential(
-      BayesianLinear(latent_dim, hidden_dim, layer_init_std),
+      SILayer(latent_dim, hidden_dim),
       nn.ReLU(),
-      BayesianLinear(hidden_dim, hidden_dim, layer_init_std),
+      SILayer(hidden_dim, hidden_dim),
       nn.ReLU(),
     )
 
     self.decoder_heads = nn.ModuleList(
       nn.Sequential(
-        BayesianLinear(hidden_dim, hidden_dim, layer_init_std),
+        SILayer(hidden_dim, hidden_dim),
         nn.ReLU(),
-        BayesianLinear(hidden_dim, in_dim, layer_init_std),
+        SILayer(hidden_dim, in_dim),
         nn.Sigmoid(),
       )
       for _ in range(ntasks)
     )
 
   @property
-  def bayesian_layers(self):
+  def linear_layers(self):
     return [
       layer
       for layer in list(self.decoder_shared)
-      # list of ModuleLists
       + list(chain.from_iterable(self.decoder_heads))
-      if isinstance(layer, BayesianLinear)
+      if isinstance(layer, SILayer)
     ]
 
-  @property
-  def shared_bayesian_layers(self):
-    return [
-      layer for layer in list(self.decoder_shared) if isinstance(layer, BayesianLinear)
-    ]
-
-  def compute_kl_loss(self):
-    return sum(layer.kl_layer() for layer in self.shared_bayesian_layers)
-
-  def update_prior(self):
-    for layer in self.bayesian_layers:
-      layer.update_prior_layer()
+  def compute_surrogate_loss(self):
+    return self.c * sum(layer.surrogate_layer() for layer in self.linear_layers)
 
   def train_epoch(self, loader, opt, task, epoch):
     self.train()
@@ -97,17 +85,9 @@ class Dgm(Generative):
       orig, ta = batch_data
       orig, ta = orig.to(device), ta.to(device)
       self.zero_grad()
-      gen_mu_log_sigmas = [self(orig, ta) for _ in range(self.bayesian_train_samples)]
-      uncerts = torch.stack(
-        [
-          self.classifier.classifier_uncertainty(gmls[0], ta)
-          for gmls in gen_mu_log_sigmas
-        ]
-      )
-      elbos = torch.stack(
-        [self.elbo(gmls[0], gmls[1], gmls[2], orig) for gmls in gen_mu_log_sigmas]
-      )
-      loss = -elbos.mean(0) + self.compute_kl_loss() / len(loader.dataset)
+      gen, mu, log_sigma = self(orig, ta)
+      uncert = self.classifier.classifier_uncertainty(gen, ta)
+      loss = -self.elbo(gen, mu, log_sigma, orig) + self.compute_surrogate_loss()
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and orig.shape[0] == self.batch_size:
@@ -115,9 +95,12 @@ class Dgm(Generative):
           'task': task,
           'epoch': epoch,
           'train/train_loss': loss,
-          'train/train_uncert': uncerts.mean(0),
+          'train/train_uncert': uncert,
         }
-        self.wandb_log(metrics)
+        wandb.log(metrics)
+
+      for layer in self.linear_layers:
+        layer.update_importance()
 
   def train_test_run(self, tasks, num_epochs):
     self.train()
@@ -127,8 +110,11 @@ class Dgm(Generative):
       opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
       for epoch in trange(num_epochs, desc=f'task {task}'):
         self.train_epoch(train_loader, opt, task, epoch)
+
+      for layer in self.linear_layers:
+        layer.update_omega(self.xi)
+
       self.test_run(test_loaders, task)
-      self.update_prior()
       img_samples = util.samples(self, upto_task=task, multihead=True)
       img_recons = util.reconstructions(
         self, test_loaders, upto_task=task, multihead=True
@@ -139,38 +125,19 @@ class Dgm(Generative):
     final_grid = make_grid(cumulative_img_samples, nrow=1, padding=0)
     wandb.log({'task': task, 'cumulative_samples': wandb.Image(final_grid)})
 
-  def wandb_log(self, metrics):
-    sli = 0
-    for sl in self.decoder_shared:
-      if isinstance(sl, BayesianLinear):
-        metrics[f'sigma/s_{sli}_sigma_w'] = (
-          torch.std(torch.exp(sl.log_sigma_w)).detach().item()
-        )
-        sli += 1
-    for hi, head in enumerate(self.decoder_heads):
-      hli = 0
-      for hl in head:
-        if isinstance(hl, BayesianLinear):
-          metrics[f'sigma/h_{hi}_{hli}_sigma_w'] = (
-            torch.std(torch.exp(hl.log_sigma_w)).detach().item()
-          )
-          hli += 1
-    wandb.log(metrics)
-
 
 def generative_model_pipeline(params):
   loaders, classifier = generative.get_loaders_classifier(params)
 
-  model = Dgm(
+  model = Gsi(
     in_dim=params.in_dim,
     hidden_dim=params.hidden_dim,
     latent_dim=params.latent_dim,
     ntasks=params.ntasks,
     batch_size=params.batch_size,
-    layer_init_std=params.layer_init_std,
-    bayesian_train_samples=params.bayesian_train_samples,
-    bayesian_test_samples=params.bayesian_test_samples,
     learning_rate=params.learning_rate,
+    c=params.c,
+    xi=params.xi,
     classifier=classifier,
   ).to(torch_device())
 
