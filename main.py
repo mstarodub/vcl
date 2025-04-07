@@ -1,7 +1,7 @@
 import wandb
 
-import vae
 import util
+from vae import baseline_generative_model
 from vcl_gen import generative_model_pipeline as vcl_generative_model_pipeline
 from vcl_disc import discriminative_model_pipeline as vcl_discriminative_model_pipeline
 from si_disc import discriminative_model_pipeline as si_discriminative_model_pipeline
@@ -185,9 +185,9 @@ if __name__ == '__main__':
 
   # model = vae.baseline_generative_model(num_epochs=20, problem='mnist')
 
-  # model = model_pipeline(dgm_mnist_run, wandb_log=True)
+  model = model_pipeline(dgm_mnist_run, wandb_log=True)
   # model = model_pipeline(dgm_nmnist_run, wandb_log=False)
 
   # model = model_pipeline(dsi_pmnist_run, wandb_log=True)
   # model = model_pipeline(dsi_smnist_run, wandb_log=True)
-  model = model_pipeline(dsi_nmnist_run, wandb_log=True)
+  # model = model_pipeline(dsi_nmnist_run, wandb_log=True)

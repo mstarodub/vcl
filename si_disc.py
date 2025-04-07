@@ -116,7 +116,6 @@ class Dsi(nn.Module):
       return self.heads[0](x)
 
   def compute_surrogate_loss(self):
-    # TODO: should this be computed over heads? --> there seems to be no difference
     return self.c * sum(layer.surrogate_layer() for layer in self.linear_layers)
 
   def train_epoch(self, loader, opt, task, epoch):
