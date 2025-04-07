@@ -25,6 +25,8 @@ class Dgm(nn.Module):
     layer_init_std,
     learning_rate,
     classifier,
+    bayesian_train_samples,
+    bayesian_test_samples,
     logging_every=10,
   ):
     super().__init__()
@@ -33,6 +35,8 @@ class Dgm(nn.Module):
     self.batch_size = batch_size
     self.classifier = classifier
     self.learning_rate = learning_rate
+    self.bayesian_train_samples = bayesian_train_samples
+    self.bayesian_test_samples = bayesian_test_samples
 
     self.latent_dim = latent_dim
     self.encoders = nn.ModuleList(
@@ -121,7 +125,7 @@ class Dgm(nn.Module):
     return self.decode(z, task), mu, log_sigma
 
   # we don't scale this by the batch_size, instead one should change learning_rate
-  def elbo(self, mu, log_sigma, gen, orig):
+  def elbo(self, gen, mu, log_sigma, orig):
     reconstr_likelihood = -F.binary_cross_entropy(gen, orig, reduction='mean')
     kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
     return reconstr_likelihood - kl_loss
@@ -140,12 +144,17 @@ class Dgm(nn.Module):
       orig, ta = batch_data
       orig, ta = orig.to(device), ta.to(device)
       self.zero_grad()
-      # TODO: no bayesian sampling for now
-      gen, mu, log_sigma = self(orig, ta)
-      uncert = self.classifier.classifier_uncertainty(gen, ta)
-      loss = -self.elbo(mu, log_sigma, gen, orig) + self.compute_kl() / len(
-        loader.dataset
+      gen_mu_log_sigmas = [self(orig, ta) for _ in range(self.bayesian_train_samples)]
+      uncerts = torch.stack(
+        [
+          self.classifier.classifier_uncertainty(gmls[0], ta)
+          for gmls in gen_mu_log_sigmas
+        ]
       )
+      elbos = torch.stack(
+        [self.elbo(gmls[0], gmls[1], gmls[2], orig) for gmls in gen_mu_log_sigmas]
+      )
+      loss = -elbos.mean(0) + self.compute_kl() / len(loader.dataset)
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and orig.shape[0] == self.batch_size:
@@ -153,7 +162,7 @@ class Dgm(nn.Module):
           'task': task,
           'epoch': epoch,
           'train/train_loss': loss,
-          'train/train_uncert': uncert,
+          'train/train_uncert': uncerts.mean(0),
         }
         self.wandb_log(metrics)
 
@@ -187,7 +196,7 @@ class Dgm(nn.Module):
       for batch, batch_data in enumerate(loader):
         orig, ta = batch_data[0], batch_data[1]
         orig, ta = orig.to(device), ta.to(device)
-        # TODO: no bayesian sampling for now
+        # TODO: no bayesian sampling for testing right now
         gen, mu, log_sigma = self(orig, ta)
         uncert = self.classifier.classifier_uncertainty(gen, ta)
         task_uncertainties.append(uncert.item())
@@ -250,6 +259,8 @@ def generative_model_pipeline(params):
     ntasks=params.ntasks,
     batch_size=params.batch_size,
     layer_init_std=params.layer_init_std,
+    bayesian_train_samples=params.bayesian_train_samples,
+    bayesian_test_samples=params.bayesian_test_samples,
     learning_rate=params.learning_rate,
     classifier=classifier,
   ).to(torch_device())

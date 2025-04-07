@@ -106,6 +106,8 @@ if __name__ == '__main__':
     # 50
     batch_size=256,
     layer_init_std=None,
+    bayesian_train_samples=1,
+    bayesian_test_samples=1,
     # 1e-4
     learning_rate=1e-3,
     problem='mnist',
@@ -122,6 +124,8 @@ if __name__ == '__main__':
     epochs=20,
     batch_size=256,
     layer_init_std=None,
+    bayesian_train_samples=1,
+    bayesian_test_samples=1,
     # 1e-4
     learning_rate=1e-3,
     problem='nmnist',
