@@ -199,6 +199,7 @@ class Ddm(nn.Module):
     for batch, batch_data in enumerate(loader):
       if self.multihead:
         data, target, t = batch_data
+        t = t.to(device)
       else:
         (data, target), t = batch_data, None
       data, target = data.to(device), target.to(device)
@@ -268,6 +269,7 @@ class Ddm(nn.Module):
       for batch, batch_data in enumerate(loader):
         if self.multihead:
           data, target, t = batch_data
+          t = t.to(device)
         else:
           (data, target), t = batch_data, None
         data, target = data.to(device), target.to(device)
