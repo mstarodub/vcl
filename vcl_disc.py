@@ -312,19 +312,8 @@ def discriminative_model_pipeline(params):
     loaders = dataloaders.notmnist_task_loaders(params.batch_size)
 
   if params.pretrain_epochs > 0:
-    mle = mle_disc.DNet(
-      in_dim=params.in_dim,
-      hidden_dim=params.hidden_dim,
-      out_dim=params.out_dim,
-      hidden_layers=params.hidden_layers,
-      learning_rate=params.learning_rate,
-    ).to(torch_device())
-    mle = torch.compile(mle)
-    mle.train_run(
-      baseline_loaders[0][0],
-      baseline_loaders[1][0],
-      num_epochs=params.pretrain_epochs,
-    )
+    mle = mle_disc.pretrain_mle(params, baseline_loaders[0][0], baseline_loaders[1][0])
+
   else:
     mle = None
 

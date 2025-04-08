@@ -45,9 +45,11 @@ if __name__ == '__main__':
     per_task_opt=False,
     bayesian_test_samples=100,
     bayesian_train_samples=10,
-    # 0
-    pretrain_epochs=10,
-    layer_init_std=1e-10,
+    # 10
+    pretrain_epochs=100,
+    # the best run was also summing KL over the heads
+    layer_init_logstd_mean=-23,
+    layer_init_logstd_std=0.0001,
   )
 
   dvcl_smnist = experiments.disc_smnist | dict(
@@ -152,7 +154,7 @@ if __name__ == '__main__':
 
   # discriminative
   # vcl
-  # model = model_pipeline(dvcl_pmnist, wandb_log=True)
+  model = model_pipeline(dvcl_pmnist, wandb_log=True)
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_nmnist, wandb_log=True)
   # si
@@ -173,7 +175,8 @@ if __name__ == '__main__':
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
-  sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
-  sweep_id = 'c9bxg4ir'
+  #
+  # sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
+  # sweep_id = '7cfmiwtv'
   # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-  wandb.agent(sweep_id, model_pipeline, project='vcl', count=20)
+  # wandb.agent(sweep_id, model_pipeline, project='vcl', count=20)

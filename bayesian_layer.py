@@ -6,7 +6,7 @@ import util
 
 
 class BayesianLinear(nn.Module):
-  def __init__(self, in_dim, out_dim, log_sigma_w_mean, log_sigma_w_std):
+  def __init__(self, in_dim, out_dim, log_sigma_mean, log_sigma_std):
     super().__init__()
     device = util.torch_device()
     self.in_dim = in_dim
@@ -29,15 +29,38 @@ class BayesianLinear(nn.Module):
     # whereas log mean ranges from 0 to -27 => mean from 1 to 1e-12
     # gives us a lognormal distribution over sigma_w
     # (which is ok since it needs to be >0)
+    #
+    # example:
+    # sigma: exp(log_sigma_mean - 3*1e-1) bis exp(log_sigma_mean + 3*1e-1)
+    #       exp(log_sigma_mean) / exp(3*1e-1) bis  exp(log_sigma_mean) * exp(3*1e-1)
+    #       exp(log_sigma_mean) * 0.75 bis  exp(log_sigma_mean) * 1.35
+    #       exp(log_sigma_mean) * 0.7 bis  exp(log_sigma_mean) * 1.3
+    # => +-30% below/above
+    #
+    # sigma_w_mean : want 10^-14
+    # and
+    # log_sigma_mean : want -3
+    # => sigma_w_mean : want 0.05 = 5*10^-2
+    # => want 10^0
+    #
+    # => for log_sigma_mean, want log(10^-14) to log(10^0) == -32 to 0
     init_log_sigma_w = torch.empty(out_dim, in_dim)
     torch.nn.init.normal_(
       init_log_sigma_w,
-      mean=log_sigma_w_mean,
-      std=log_sigma_w_std,
+      mean=log_sigma_mean,
+      std=log_sigma_std,
     )
     self.log_sigma_w = nn.Parameter(init_log_sigma_w)
-    # we want sigma_b to be close to 0, similar to classic NN bias init
-    init_log_sigma_b = torch.log(1e-10 * torch.ones(out_dim))
+    # we cannot just postulate that we need sigma_b to be close to 0
+    # (classic NN bias), as in this case this represents our uncertainty measure
+    # (why should we be certain initially? it makes no sense)
+    # we reuse the same parameter as for the log_sigma_w
+    init_log_sigma_b = torch.empty(out_dim)
+    torch.nn.init.normal_(
+      init_log_sigma_b,
+      mean=log_sigma_mean,
+      std=log_sigma_std,
+    )
     self.log_sigma_b = nn.Parameter(init_log_sigma_b)
 
     # priors

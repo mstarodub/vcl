@@ -23,7 +23,7 @@ sweep = {
   # },
   'early_terminate': {
     'type': 'hyperband',
-    'min_iter': 1,
+    'min_iter': 2,
     'eta': 2,
   },
 }
@@ -55,8 +55,8 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
       'bayesian_test_samples': [1, 10, 100],
       'bayesian_train_samples': [1, 10, 100],
       'pretrain_epochs': [0, 10, 30, 100],
-      'layer_init_logstd_mean': {'min': -27, 'max': 0},
-      'layer_init_logstd_std': [1e-1, 1e-2, 1e-3],
+      'layer_init_logstd_mean': {'min': -32, 'max': 0},
+      'layer_init_logstd_std': [1e-1, 1e-2, 1e-3, 1e-5],
     }
   )
 }

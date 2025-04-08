@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from tqdm.auto import trange
+import os
 
 from accuracy import accuracy
 from util import torch_device
@@ -68,3 +69,29 @@ class DNet(nn.Module):
       losses.append(loss.item())
       accuracies.append(acc.item())
     return np.mean(losses), np.mean(accuracies)
+
+
+def pretrain_mle(params, train_loader, test_loader):
+  device = torch_device()
+  mle = DNet(
+    in_dim=params.in_dim,
+    hidden_dim=params.hidden_dim,
+    out_dim=params.out_dim,
+    hidden_layers=params.hidden_layers,
+    learning_rate=params.learning_rate,
+  )
+
+  mle_path = f'pretrained/mle_{params.pretrain_epochs}.pt'
+  if os.path.exists(mle_path):
+    mle.load_state_dict(torch.load(mle_path, map_location=device))
+    mle.to(device)
+  else:
+    mle.to(device)
+    mle.train_run(
+      train_loader,
+      test_loader,
+      num_epochs=params.pretrain_epochs,
+    )
+    torch.save(mle.state_dict(), mle_path)
+
+  return mle
