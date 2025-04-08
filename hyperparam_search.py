@@ -21,11 +21,11 @@ sweep = {
   #   'batch_size': {'values': [256, 512, None]},
   #   'learning_rate': {'values': [1e-3, 5e-4, 1e-4]},
   # },
-  'early_terminate': {
-    'type': 'hyperband',
-    'min_iter': 2,
-    'eta': 2,
-  },
+  # 'early_terminate': {
+  #   'type': 'hyperband',
+  #   'min_iter': 2,
+  #   'eta': 2,
+  # },
 }
 
 sweep_discriminative = sweep | {
@@ -51,9 +51,10 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
       'epochs': 100,
       'learning_rate': 1e-3,
       'coreset_size': 0,
-      'per_task_opt': [True, False],
+      # [True, False],
+      'per_task_opt': False,
       'bayesian_test_samples': [1, 10, 100],
-      'bayesian_train_samples': [1, 10, 100],
+      'bayesian_train_samples': [1, 10],
       'pretrain_epochs': [0, 10, 30, 100],
       'layer_init_logstd_mean': {'min': -32, 'max': 0},
       'layer_init_logstd_std': [1e-1, 1e-2, 1e-3, 1e-5],

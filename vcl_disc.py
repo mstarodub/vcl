@@ -97,7 +97,9 @@ class Ddm(nn.Module):
 
   def compute_kl(self):
     # notice that the gradients of the unused heads are zeroed and hence the KL terms are zero too
-    return sum(layer.kl_layer() for layer in self.shared_bayesian_layers)
+    # XXX: this should really be only shared_bayesian_layers, as otherwise we get accidental
+    #      L2 regularization over the heads. however, finding good hyperparams seems challenging
+    return sum(layer.kl_layer() for layer in self.bayesian_layers)
 
   def forward(self, x, task=None):
     x = self.shared(x)

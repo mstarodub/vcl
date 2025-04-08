@@ -154,7 +154,7 @@ if __name__ == '__main__':
 
   # discriminative
   # vcl
-  model = model_pipeline(dvcl_pmnist, wandb_log=True)
+  # model = model_pipeline(dvcl_pmnist, wandb_log=True)
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_nmnist, wandb_log=True)
   # si
@@ -176,7 +176,7 @@ if __name__ == '__main__':
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
   #
-  # sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
-  # sweep_id = '7cfmiwtv'
-  # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-  # wandb.agent(sweep_id, model_pipeline, project='vcl', count=20)
+  sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
+  # sweep_id = 'm79moyby'
+  sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
+  wandb.agent(sweep_id, model_pipeline, project='vcl', count=20)
