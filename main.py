@@ -30,13 +30,6 @@ def model_pipeline(params=None, wandb_log=True):
   return model
 
 
-# None: start a new sweep
-def sweep_pipeline(sweep_params, sweep_id=None, max_runs=100):
-  if not sweep_id:
-    sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-  wandb.agent(sweep_id, model_pipeline, project='vcl', count=max_runs)
-
-
 if __name__ == '__main__':
   wandb.login()
   util.torch_version()
@@ -177,4 +170,10 @@ if __name__ == '__main__':
   # model = model_pipeline(gsi_mnist, wandb_log=True)
   # model = model_pipeline(gsi_nmnist, wandb_log=True)
 
-  sweep_pipeline(hyperparam_search.sweep_dvcl_pmnist_nocoreset, sweep_id=None)
+  # wandb bug: we cant properly join existing sweeps outside of __main__ with
+  # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
+  # so just run this inside __main__
+  sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
+  sweep_id = 'c9bxg4ir'
+  # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
+  wandb.agent(sweep_id, model_pipeline, project='vcl', count=20)
