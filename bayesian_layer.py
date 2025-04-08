@@ -6,32 +6,39 @@ import util
 
 
 class BayesianLinear(nn.Module):
-  def __init__(self, in_dim, out_dim, init_std):
+  def __init__(self, in_dim, out_dim, log_sigma_w_mean, log_sigma_w_std):
     super().__init__()
     device = util.torch_device()
     self.in_dim = in_dim
     self.out_dim = out_dim
 
-    # posteriors
-    init_w = torch.empty(out_dim, in_dim)
-    # torch.nn.init.kaiming_normal_(init_w, mode='fan_in', nonlinearity='relu')
-    torch.nn.init.normal_(init_w, mean=0, std=0.1)
-    self.mu_w = nn.Parameter(init_w)
-    # init_b = torch.zeros(out_dim)
-    init_b = torch.empty(out_dim)
-    torch.nn.init.normal_(init_b, mean=0, std=0.1)
-    self.mu_b = nn.Parameter(init_b)
-    # self.log_sigma_w = nn.Parameter(torch.log(init_std * torch.ones(out_dim, in_dim)))
-    init_sig_w = torch.empty(out_dim, in_dim)
-    torch.nn.init.normal_(init_sig_w, mean=-3, std=0.1)
-    self.log_sigma_w = nn.Parameter(init_sig_w)
-    # self.log_sigma_b = nn.Parameter(torch.log(init_std * torch.ones(out_dim)))
-    init_sig_b = torch.empty(out_dim)
-    torch.nn.init.normal_(init_sig_b, mean=-3, std=0.1)
-    self.log_sigma_b = nn.Parameter(init_sig_b)
+    # posteriors, mu - possibly overwritten with mle
+    init_mu_w = torch.empty(out_dim, in_dim)
+    # approx. equivalent to mean=0, std=0.1 => most values are in [-0.1, 0.1]
+    torch.nn.init.kaiming_normal_(init_mu_w, nonlinearity='relu')
+    self.mu_w = nn.Parameter(init_mu_w)
+    # kaiming already gives us reasonable variance
+    init_mu_b = torch.zeros(out_dim)
+    self.mu_b = nn.Parameter(init_mu_b)
 
-    assert init_w.size(dim=0) == out_dim and init_w.size(dim=1) == in_dim
-    assert init_b.size(dim=0) == out_dim
+    # posteriors, sigma
+    # for different std values we will get 99.7% of the distribution ...
+    # 1e-1: +-30% below/above
+    # 1e-2: +-3% below/above
+    # 1e-3: +. 0.3% below/above
+    # whereas log mean ranges from 0 to -27 => mean from 1 to 1e-12
+    # gives us a lognormal distribution over sigma_w
+    # (which is ok since it needs to be >0)
+    init_log_sigma_w = torch.empty(out_dim, in_dim)
+    torch.nn.init.normal_(
+      init_log_sigma_w,
+      mean=log_sigma_w_mean,
+      std=log_sigma_w_std,
+    )
+    self.log_sigma_w = nn.Parameter(init_log_sigma_w)
+    # we want sigma_b to be close to 0, similar to classic NN bias init
+    init_log_sigma_b = torch.log(1e-10 * torch.ones(out_dim))
+    self.log_sigma_b = nn.Parameter(init_log_sigma_b)
 
     # priors
     self.prior_mu_w = torch.zeros_like(self.mu_w, device=device)

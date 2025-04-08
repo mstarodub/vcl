@@ -3,6 +3,52 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
 import wandb
+from copy import deepcopy
+
+
+# cursed (and ruff formatting makes it ugly)
+class infix_operator:
+  def __init__(self, function, left=None, right=None):
+    self.function = function
+    self.left = left
+    self.right = right
+
+  def __call__(self, *args, **kwargs):
+    return self.function(*args, **kwargs)
+
+  def __rmul__(self, left):
+    if self.right is None:
+      if self.left is None:
+        return infix_operator(self.function, left=left)
+      else:
+        raise SyntaxError('Infix operator already has its left argument')
+    else:
+      return self.function(left, self.right)
+
+  def __mul__(self, right):
+    if self.left is None:
+      if self.right is None:
+        return infix_operator(self.function, right=right)
+      else:
+        raise SyntaxError('Infix operator already has its right argument')
+    else:
+      return self.function(self.left, right)
+
+
+# '|' for dictionaries is not recursive!
+# {'x': {'y': 1}} | {'x': {'z': 2}} == {'x': {'z': 2}}
+# but
+# {'x': {'y': 1}} *dict_merge* {'x': {'z': 2}} == {'x': {'y': 1, 'z': 2}}
+@infix_operator
+def dict_merge(a: dict, b: dict) -> dict:
+  res = deepcopy(a)
+  for bk, bv in b.items():
+    av = res.get(bk)
+    if isinstance(av, dict) and isinstance(bv, dict):
+      res[bk] = dict_merge(av, bv)
+    else:
+      res[bk] = deepcopy(bv)
+  return res
 
 
 def torch_version():
@@ -14,10 +60,8 @@ def torch_version():
   )
 
 
-def torch_device(enable_mps=False, enable_cuda=True):
-  if torch.backends.mps.is_available() and enable_mps:
-    device = torch.device('mps')
-  elif torch.cuda.is_available() and enable_cuda:
+def torch_device(enable_cuda=True):
+  if torch.cuda.is_available() and enable_cuda:
     device = torch.device('cuda')
   else:
     device = torch.device('cpu')

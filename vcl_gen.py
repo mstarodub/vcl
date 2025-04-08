@@ -22,7 +22,8 @@ class Dgm(Generative):
     batch_size,
     learning_rate,
     classifier,
-    layer_init_std,
+    layer_init_logstd_mean,
+    layer_init_logstd_std,
     bayesian_train_samples,
     bayesian_test_samples,
   ):
@@ -51,17 +52,37 @@ class Dgm(Generative):
     )
 
     self.decoder_shared = nn.Sequential(
-      BayesianLinear(latent_dim, hidden_dim, layer_init_std),
+      BayesianLinear(
+        latent_dim,
+        hidden_dim,
+        layer_init_logstd_mean,
+        layer_init_logstd_std,
+      ),
       nn.ReLU(),
-      BayesianLinear(hidden_dim, hidden_dim, layer_init_std),
+      BayesianLinear(
+        hidden_dim,
+        hidden_dim,
+        layer_init_logstd_mean,
+        layer_init_logstd_std,
+      ),
       nn.ReLU(),
     )
 
     self.decoder_heads = nn.ModuleList(
       nn.Sequential(
-        BayesianLinear(hidden_dim, hidden_dim, layer_init_std),
+        BayesianLinear(
+          hidden_dim,
+          hidden_dim,
+          layer_init_logstd_mean,
+          layer_init_logstd_std,
+        ),
         nn.ReLU(),
-        BayesianLinear(hidden_dim, in_dim, layer_init_std),
+        BayesianLinear(
+          hidden_dim,
+          in_dim,
+          layer_init_logstd_mean,
+          layer_init_logstd_std,
+        ),
         nn.Sigmoid(),
       )
       for _ in range(ntasks)
@@ -167,7 +188,8 @@ def generative_model_pipeline(params):
     latent_dim=params.latent_dim,
     ntasks=params.ntasks,
     batch_size=params.batch_size,
-    layer_init_std=params.layer_init_std,
+    layer_init_logstd_mean=params.layer_init_logstd_mean,
+    layer_init_logstd_std=params.layer_init_logstd_std,
     bayesian_train_samples=params.bayesian_train_samples,
     bayesian_test_samples=params.bayesian_test_samples,
     learning_rate=params.learning_rate,

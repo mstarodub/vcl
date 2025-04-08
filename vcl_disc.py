@@ -6,7 +6,7 @@ from tqdm.auto import tqdm, trange
 import wandb
 from typing import Optional, List, Set, Any
 
-import mle
+import mle_disc
 import dataloaders
 from accuracy import accuracy
 from util import torch_device
@@ -22,7 +22,8 @@ class Ddm(nn.Module):
     hidden_layers,
     ntasks,
     batch_size,
-    layer_init_std,
+    layer_init_logstd_mean,
+    layer_init_logstd_std,
     learning_rate,
     per_task_opt=True,
     bayesian_test_samples=1,
@@ -43,15 +44,23 @@ class Ddm(nn.Module):
     self.multihead = multihead
 
     self.shared = nn.Sequential()
-    self.shared.append(BayesianLinear(in_dim, hidden_dim, layer_init_std))
+    self.shared.append(
+      BayesianLinear(in_dim, hidden_dim, layer_init_logstd_mean, layer_init_logstd_std)
+    )
     self.shared.append(nn.ReLU())
     for _ in range(hidden_layers - 1):
-      self.shared.append(BayesianLinear(hidden_dim, hidden_dim, layer_init_std))
+      self.shared.append(
+        BayesianLinear(
+          hidden_dim, hidden_dim, layer_init_logstd_mean, layer_init_logstd_std
+        )
+      )
       self.shared.append(nn.ReLU())
 
     self.heads = nn.ModuleList(
       [
-        BayesianLinear(hidden_dim, out_dim, layer_init_std)
+        BayesianLinear(
+          hidden_dim, out_dim, layer_init_logstd_mean, layer_init_logstd_std
+        )
         for _ in range(ntasks if self.multihead else 1)
       ]
     )
@@ -303,7 +312,7 @@ def discriminative_model_pipeline(params):
     loaders = dataloaders.notmnist_task_loaders(params.batch_size)
 
   if params.pretrain_epochs > 0:
-    mle = mle.DNet(
+    mle = mle_disc.DNet(
       in_dim=params.in_dim,
       hidden_dim=params.hidden_dim,
       out_dim=params.out_dim,
@@ -326,7 +335,8 @@ def discriminative_model_pipeline(params):
     hidden_layers=params.hidden_layers,
     ntasks=params.ntasks,
     batch_size=params.batch_size,
-    layer_init_std=params.layer_init_std,
+    layer_init_logstd_mean=params.layer_init_logstd_mean,
+    layer_init_logstd_std=params.layer_init_logstd_std,
     per_task_opt=params.per_task_opt,
     bayesian_test_samples=params.bayesian_test_samples,
     bayesian_train_samples=params.bayesian_train_samples,
