@@ -236,7 +236,7 @@ class Ddm(nn.Module):
   def train_test_run(self, tasks, num_epochs):
     self.train()
     opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-    wandb.watch(self, log_freq=100)
+    # wandb.watch(self, log_freq=100)
     old_coreset_idx = []
     for task, (train_loaders, test_loaders) in enumerate(tasks):
       coreset_idx = self.select_coreset(len(train_loaders[-1].dataset), old_coreset_idx)

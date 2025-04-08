@@ -142,7 +142,7 @@ class Dgm(Generative):
 
   def train_test_run(self, tasks, num_epochs):
     self.train()
-    wandb.watch(self, log_freq=100)
+    # wandb.watch(self, log_freq=100)
     cumulative_img_samples = []
     for task, (train_loader, test_loaders) in enumerate(tasks):
       opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)

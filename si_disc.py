@@ -98,7 +98,7 @@ class Dsi(nn.Module):
   def train_test_run(self, tasks, num_epochs):
     self.train()
     opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-    wandb.watch(self, log_freq=100)
+    # wandb.watch(self, log_freq=100)
     for task, (train_loaders, test_loaders) in enumerate(tasks):
       if self.per_task_opt:
         opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
