@@ -30,8 +30,10 @@ def model_pipeline(params=None, wandb_log=True):
   return model
 
 
-def sweep_pipeline(sweep_params, max_runs=100):
-  sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
+# None: start a new sweep
+def sweep_pipeline(sweep_params, sweep_id=None, max_runs=100):
+  if not sweep_id:
+    sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
   wandb.agent(sweep_id, model_pipeline, count=max_runs)
 
 
@@ -175,4 +177,4 @@ if __name__ == '__main__':
   # model = model_pipeline(gsi_mnist, wandb_log=True)
   # model = model_pipeline(gsi_nmnist, wandb_log=True)
 
-  sweep_pipeline(hyperparam_search.sweep_dvcl_pmnist_nocoreset, experiments.disc_pmnist)
+  sweep_pipeline(hyperparam_search.sweep_dvcl_pmnist_nocoreset, sweep_id=None)
