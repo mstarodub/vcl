@@ -34,7 +34,7 @@ def model_pipeline(params=None, wandb_log=True):
 def sweep_pipeline(sweep_params, sweep_id=None, max_runs=100):
   if not sweep_id:
     sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-  wandb.agent(sweep_id, model_pipeline, count=max_runs)
+  wandb.agent(sweep_id, model_pipeline, project='vcl', count=max_runs)
 
 
 if __name__ == '__main__':
