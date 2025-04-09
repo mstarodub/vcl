@@ -73,8 +73,8 @@ sweep_dvcl_pmnist_coreset = sweep_discriminative | {
       'learning_rate': 1e-3,
       'coreset_size': {'min': 200, 'max': 50_000},
       'per_task_opt': [True, False],
-      'pretrain_epochs': 100,
-      'layer_init_logstd_mean': -25.79,
+      'pretrain_epochs': 30,
+      'layer_init_logstd_mean': -25.77,
       'layer_init_logstd_std': 0.01,
     }
   )

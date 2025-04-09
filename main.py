@@ -35,6 +35,8 @@ if __name__ == '__main__':
   util.torch_version()
   util.seed(0)
 
+  # best params
+
   dvcl_pmnist = experiments.disc_pmnist | dict(
     model='vcl',
     epochs=100,
@@ -46,6 +48,8 @@ if __name__ == '__main__':
     layer_init_logstd_mean=-25.77,
     layer_init_logstd_std=0.01,
   )
+
+  # TODO
 
   dvcl_smnist = experiments.disc_smnist | dict(
     model='vcl',
@@ -141,7 +145,7 @@ if __name__ == '__main__':
 
   # discriminative
   # vcl
-  model = model_pipeline(dvcl_pmnist, wandb_log=True)
+  # model = model_pipeline(dvcl_pmnist, wandb_log=True)
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_nmnist, wandb_log=True)
   # si
@@ -163,7 +167,7 @@ if __name__ == '__main__':
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
   #
-  sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
-  # sweep_id = 'gacjzl7i'
+  sweep_params = hyperparam_search.sweep_dvcl_pmnist_coreset
+  sweep_id = 'rpd00t3j'
   # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-  # wandb.agent(sweep_id, model_pipeline, project='vcl', count=200)
+  wandb.agent(sweep_id, model_pipeline, project='vcl', count=200)
