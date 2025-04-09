@@ -75,13 +75,27 @@ class Generative(nn.Module):
     kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
     return reconstr_likelihood - kl_loss
 
-  def compute_test_ll(self, mu, log_sigma):
+  def compute_test_ll(self, orig, ta, mu, log_sigma):
+    num_samples = 5_000
+    batch_size = orig.shape[0]
     # q(z|x)
     q_z_dist = torch.distributions.Normal(mu, torch.exp(log_sigma))
     # p(z)
-    prior_dist = torch.distributions.Normal(torch.zeros_like(), torch.ones_like(mu))
-    # samples =
-    return torch.tensor(0)
+    prior_dist = torch.distributions.Normal(
+      torch.zeros_like(mu), torch.ones_like(log_sigma)
+    )
+    z_samples = q_z_dist.sample((num_samples,))
+    z_samples_flat = z_samples.reshape(-1, self.latent_dim)
+    gen_flat = self.decode(z_samples_flat, ta.repeat(num_samples))
+    gen = gen_flat.reshape(num_samples, batch_size, -1)
+    # p(x|z, θ)
+    dist = torch.distributions.Bernoulli(probs=gen)
+    log_p_x_z = dist.log_prob(orig).sum(dim=-1)
+    log_p_z = prior_dist.log_prob(z_samples).sum(dim=-1)
+    log_q_z_x = q_z_dist.log_prob(z_samples).sum(dim=-1)
+    log_weights = log_p_x_z + log_p_z - log_q_z_x
+    log_mean_weights = torch.logsumexp(log_weights, dim=0) - np.log(num_samples)
+    return log_mean_weights.mean()
 
   @torch.no_grad()
   def test_run(self, loaders, task):
@@ -95,11 +109,17 @@ class Generative(nn.Module):
         orig, ta = orig.to(device), ta.to(device)
         gen, mu, log_sigma = self(orig, ta)
         uncert = self.classifier.classifier_uncertainty(gen, ta)
-        test_ll = self.compute_test_ll()
+        test_ll = self.compute_test_ll(orig, ta, mu, log_sigma)
         task_testlls.append(test_ll.item())
         task_uncertainties.append(uncert.item())
       task_uncertainty, task_testll = np.mean(task_uncertainties), np.mean(task_testlls)
-      wandb.log({'task': task, f'test/test_uncert_task_{test_task}': task_uncertainty})
+      wandb.log(
+        {
+          'task': task,
+          f'test/test_uncert_task_{test_task}': task_uncertainty,
+          f'test/test_ll_task_{test_task}': task_testll,
+        }
+      )
       avg_uncertainties.append(task_uncertainty)
       avg_testlls.append(task_testll)
     wandb.log(
