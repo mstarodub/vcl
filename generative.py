@@ -75,8 +75,9 @@ class Generative(nn.Module):
     kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
     return reconstr_likelihood - kl_loss
 
-  def compute_test_ll(self):
-    # TODO
+  def compute_test_ll(self, mu, log_sigma):
+    z_dist = torch.distributions.Normal(mu, torch.exp(log_sigma))
+    prior_dist = torch.distributions.Normal(torch.zeros_like())
     return torch.tensor(0)
 
   @torch.no_grad()

@@ -154,7 +154,7 @@ if __name__ == '__main__':
 
   # discriminative
   # vcl
-  # model = model_pipeline(dvcl_pmnist, wandb_log=True)
+  model = model_pipeline(dvcl_pmnist, wandb_log=True)
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_nmnist, wandb_log=True)
   # si
@@ -177,6 +177,6 @@ if __name__ == '__main__':
   # so just run this inside __main__
   #
   sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
-  sweep_id = 'uay9wcw2'
-  # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
+  sweep_id = 'gacjzl7i'
+  # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=['uay9wcw2'])
   wandb.agent(sweep_id, model_pipeline, project='vcl', count=100)

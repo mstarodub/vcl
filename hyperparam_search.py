@@ -60,7 +60,7 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
       # [0, 10, 30, 100]
       'pretrain_epochs': 0,
       # {'min': -32, 'max': 0}
-      'layer_init_logstd_mean': {'min': -26, 'max': -15},
+      'layer_init_logstd_mean': {'min': -32, 'max': -20},
       # [1e-1, 1e-2, 1e-3, 1e-5]
       'layer_init_logstd_std': 1e-2,
     }

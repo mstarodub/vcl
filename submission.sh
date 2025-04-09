@@ -4,7 +4,9 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=00:10:00
-#SBATCH --partition=devel
+#SBATCH --partition=interactive
 
-cd $DATA
-uv --version
+cd $DATA/vcl
+git stash
+git pull --rebase
+uv run main.py
