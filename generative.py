@@ -75,23 +75,36 @@ class Generative(nn.Module):
     kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
     return reconstr_likelihood - kl_loss
 
+  def compute_test_ll(self):
+    # TODO
+    return torch.tensor(0)
+
   @torch.no_grad()
   def test_run(self, loaders, task):
     self.eval()
     device = torch_device()
-    avg_uncertainties = []
+    avg_uncertainties, avg_testlls = [], []
     for test_task, loader in tqdm(enumerate(loaders), desc=f'task {task} phase t'):
-      task_uncertainties = []
+      task_uncertainties, task_testlls = [], []
       for batch, batch_data in enumerate(loader):
         orig, ta = batch_data[0], batch_data[1]
         orig, ta = orig.to(device), ta.to(device)
         gen, mu, log_sigma = self(orig, ta)
         uncert = self.classifier.classifier_uncertainty(gen, ta)
+        test_ll = self.compute_test_ll()
+        task_testlls.append(test_ll.item())
         task_uncertainties.append(uncert.item())
-      task_uncertainty = np.mean(task_uncertainties)
+      task_uncertainty, task_testll = np.mean(task_uncertainties), np.mean(task_testlls)
       wandb.log({'task': task, f'test/test_uncert_task_{test_task}': task_uncertainty})
       avg_uncertainties.append(task_uncertainty)
-    wandb.log({'task': task, 'test/test_uncert': np.mean(avg_uncertainties)})
+      avg_testlls.append(task_testll)
+    wandb.log(
+      {
+        'task': task,
+        'test/test_uncert': np.mean(avg_uncertainties),
+        'test/test_ll': np.mean(avg_testlls),
+      }
+    )
 
   def wandb_log_images_collect(
     self, task, img_samples, img_recons, cumulative_img_samples
