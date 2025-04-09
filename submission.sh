@@ -1,12 +1,11 @@
 #!/bin/bash
 #SBATCH --clusters=arc
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
+#SBATCH --nodes=2
+#SBATCH --ntasks-per-node=40
 #SBATCH --cpus-per-task=1
-#SBATCH --time=00:10:00
-#SBATCH --partition=interactive
+#SBATCH --time=1-00:00:00
+#SBATCH --partition=long
+#SBATCH --array=0-79
 
 cd $DATA/vcl
-git stash
-git pull --rebase
 uv run main.py
