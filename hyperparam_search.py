@@ -89,7 +89,7 @@ sweep_dsi_pmnist = sweep_discriminative | {
       'learning_rate': 1e-3,
       'per_task_opt': False,
       'epochs': {'min': 20, 'max': 120},
-      'c': {'min': 1e-4, 'max': 1},
+      'c': {'min': 1e-4, 'max': 1.0},
       'xi': [1e-1, 1e-2, 1e-3, 1e-5],
     }
   )

@@ -167,7 +167,7 @@ if __name__ == '__main__':
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
   #
-  sweep_params = hyperparam_search.sweep_dvcl_pmnist_coreset
-  sweep_id = 'rpd00t3j'
+  sweep_params = hyperparam_search.sweep_dsi_pmnist
+  sweep_id = 'y3d5a9dm'
   # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
   wandb.agent(sweep_id, model_pipeline, project='vcl', count=200)
