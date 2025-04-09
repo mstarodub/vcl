@@ -85,7 +85,11 @@ class Ddm(nn.Module):
 
   @property
   def shared_bayesian_layers(self):
-    return [layer for layer in self.shared if isinstance(layer, BayesianLinear)]
+    return (
+      [layer for layer in self.shared if isinstance(layer, BayesianLinear)]
+      # the single (shared) head is stored in self.heads for single-head
+      + (list(self.heads) if not self.multihead else [])
+    )
 
   def update_prior(self):
     for layer in self.bayesian_layers:
@@ -97,9 +101,9 @@ class Ddm(nn.Module):
 
   def compute_kl(self):
     # notice that the gradients of the unused heads are zeroed and hence the KL terms are zero too
-    # XXX: this should really be only shared_bayesian_layers, as otherwise we get accidental
-    #      L2 regularization over the heads. however, finding good hyperparams seems challenging
-    return sum(layer.kl_layer() for layer in self.bayesian_layers)
+    # TODO: test self.bayesian_layers performance for multi-head case
+    #   same for vcl_gen
+    return sum(layer.kl_layer() for layer in self.shared_bayesian_layers)
 
   def forward(self, x, task=None):
     x = self.shared(x)
