@@ -26,8 +26,6 @@ class Ddm(nn.Module):
     layer_init_logstd_std,
     learning_rate,
     per_task_opt=True,
-    bayesian_test_samples=1,
-    bayesian_train_samples=1,
     coreset_size=0,
     mle=None,
     multihead=False,
@@ -38,8 +36,6 @@ class Ddm(nn.Module):
     self.batch_size = batch_size
     self.learning_rate = learning_rate
     self.per_task_opt = per_task_opt
-    self.bayesian_test_samples = bayesian_test_samples
-    self.bayesian_train_samples = bayesian_train_samples
     self.coreset_size = coreset_size
     self.multihead = multihead
 
@@ -55,6 +51,7 @@ class Ddm(nn.Module):
         )
       )
       self.shared.append(nn.ReLU())
+    self.shared.forward = self.shared_forward
 
     self.heads = nn.ModuleList(
       [
@@ -67,6 +64,15 @@ class Ddm(nn.Module):
 
     if mle:
       self.init_from_mle(mle)
+
+  def shared_forward(self, x, deterministic=False):
+    for layer in self.shared:
+      if isinstance(layer, BayesianLinear):
+        x = layer(x, deterministic=deterministic)
+      # ReLU
+      else:
+        x = layer(x)
+    return x
 
   def init_from_mle(self, mle):
     for i, layer in enumerate(self.shared):
@@ -105,18 +111,18 @@ class Ddm(nn.Module):
     #   same for vcl_gen
     return sum(layer.kl_layer() for layer in self.shared_bayesian_layers)
 
-  def forward(self, x, task=None):
-    x = self.shared(x)
+  def forward(self, x, task=None, deterministic=False):
+    x = self.shared(x, deterministic=deterministic)
     if self.multihead:
       curr_batch_size, out_dim = x.shape[0], self.heads[0].out_dim
       out = torch.zeros(curr_batch_size, out_dim, device=x.device, dtype=x.dtype)
       for head_idx, head in enumerate(self.heads):
         mask = task == head_idx
         # (curr_batch_size, out_dim) * (curr_batch_size, 1)
-        out += head(x) * mask.unsqueeze(1)
+        out += head(x, deterministic=deterministic) * mask.unsqueeze(1)
       return out
     else:
-      return self.heads[0](x)
+      return self.heads[0](x, deterministic=deterministic)
 
   # returns the first component of L_SGVB, without the N factor
   @staticmethod
@@ -219,11 +225,9 @@ class Ddm(nn.Module):
         (data, target), t = batch_data, None
       data, target = data.to(device), target.to(device)
       self.zero_grad()
-      preds = [self(data, task=t) for _ in range(self.bayesian_train_samples)]
-      mean_pred = torch.stack(preds).mean(0)
+      mean_pred = self(data, task=t, deterministic=True)
       acc = accuracy(mean_pred, target)
-      losses = torch.stack([self.sgvb_mc(pred, target) for pred in preds])
-      loss = -losses.mean(0) + self.compute_kl() / len(loader.dataset)
+      loss = -self.sgvb_mc(mean_pred, target) + self.compute_kl() / len(loader.dataset)
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and data.shape[0] == self.batch_size:
@@ -288,11 +292,7 @@ class Ddm(nn.Module):
         else:
           (data, target), t = batch_data, None
         data, target = data.to(device), target.to(device)
-        # E[argmax_y p(y | theta, x)] != argmax_y E[p(y | \theta, x)]
-        # lhs: 1 sample; rhs: can get better approximation via MC
-        # 1 sample is unbiased for the p(y | \theta, x), but argmax breaks this
-        preds = [self(data, task=t) for _ in range(self.bayesian_test_samples)]
-        mean_pred = torch.stack(preds).mean(0)
+        mean_pred = self(data, task=t, deterministic=True)
         acc = accuracy(mean_pred, target)
         task_accuracies.append(acc.item())
       task_accuracy = np.mean(task_accuracies)
@@ -329,8 +329,6 @@ def discriminative_model_pipeline(params):
     layer_init_logstd_mean=params.layer_init_logstd_mean,
     layer_init_logstd_std=params.layer_init_logstd_std,
     per_task_opt=params.per_task_opt,
-    bayesian_test_samples=params.bayesian_test_samples,
-    bayesian_train_samples=params.bayesian_train_samples,
     coreset_size=params.coreset_size,
     learning_rate=params.learning_rate,
     mle=mle,

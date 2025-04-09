@@ -53,10 +53,6 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
       'coreset_size': 0,
       # [True, False],
       'per_task_opt': False,
-      # [1, 10, 100]
-      'bayesian_test_samples': 100,
-      # [1, 10]
-      'bayesian_train_samples': 1,
       # [0, 10, 30, 100]
       'pretrain_epochs': [0, 10, 30, 100],
       # {'min': -32, 'max': 0}
@@ -76,12 +72,25 @@ sweep_dvcl_pmnist_coreset = sweep_discriminative | {
       'epochs': 100,
       'learning_rate': 1e-3,
       'coreset_size': {'min': 200, 'max': 50_000},
-      # TODO, get best from ..._nocoreset run
-      # 'per_task_opt': [True, False],
-      # 'bayesian_test_samples': [1, 10, 100],
-      # 'bayesian_train_samples': [1, 10, 100],
-      # 'pretrain_epochs': [0, 10, 30, 100],
-      # 'layer_init_logstd_mean, :layer_init_logstd_std...
+      'per_task_opt': [True, False],
+      'pretrain_epochs': 100,
+      'layer_init_logstd_mean': -25.79,
+      'layer_init_logstd_std': 0.01,
+    }
+  )
+}
+
+sweep_dsi_pmnist = sweep_discriminative | {
+  'parameters': wrap_values(
+    experiments.disc_pmnist
+    | {
+      'model': 'si',
+      'batch_size': 256,
+      'learning_rate': 1e-3,
+      'per_task_opt': False,
+      'epochs': {'min': 20, 'max': 120},
+      'c': {'min': 1e-4, 'max': 1},
+      'xi': [1e-1, 1e-2, 1e-3, 1e-5],
     }
   )
 }

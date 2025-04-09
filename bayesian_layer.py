@@ -69,8 +69,10 @@ class BayesianLinear(nn.Module):
     self.prior_mu_b = torch.zeros_like(self.mu_b, device=device)
     self.prior_sigma_b = torch.ones_like(self.log_sigma_b, device=device)
 
-  def forward(self, x):
+  def forward(self, x, deterministic=False):
     mu_out = F.linear(x, self.mu_w, self.mu_b)
+    if deterministic:
+      return mu_out
     sigma_out = torch.sqrt(
       F.linear(x**2, torch.exp(2 * self.log_sigma_w), torch.exp(2 * self.log_sigma_b))
     )

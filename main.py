@@ -40,16 +40,11 @@ if __name__ == '__main__':
     epochs=100,
     batch_size=256,
     learning_rate=1e-3,
-    # 2000
     coreset_size=0,
     per_task_opt=False,
-    bayesian_test_samples=100,
-    bayesian_train_samples=10,
-    # 10
-    pretrain_epochs=100,
-    # the best run was also summing KL over the heads
-    layer_init_logstd_mean=-23,
-    layer_init_logstd_std=0.0001,
+    pretrain_epochs=30,
+    layer_init_logstd_mean=-25.77,
+    layer_init_logstd_std=0.01,
   )
 
   dvcl_smnist = experiments.disc_smnist | dict(
@@ -61,8 +56,6 @@ if __name__ == '__main__':
     coreset_size=200,
     per_task_opt=False,
     layer_init_std=1e-3,
-    bayesian_test_samples=100,
-    bayesian_train_samples=10,
     learning_rate=1e-3,
   )
 
@@ -74,8 +67,6 @@ if __name__ == '__main__':
     coreset_size=0,
     per_task_opt=False,
     layer_init_std=1e-3,
-    bayesian_test_samples=100,
-    bayesian_train_samples=10,
     learning_rate=1e-3,
   )
 
@@ -86,8 +77,6 @@ if __name__ == '__main__':
     # 50
     batch_size=256,
     layer_init_std=None,
-    bayesian_train_samples=1,
-    bayesian_test_samples=1,
     # 1e-4
     learning_rate=1e-3,
   )
@@ -98,8 +87,6 @@ if __name__ == '__main__':
     epochs=20,
     batch_size=256,
     layer_init_std=None,
-    bayesian_train_samples=1,
-    bayesian_test_samples=1,
     # 1e-4
     learning_rate=1e-3,
   )
@@ -154,7 +141,7 @@ if __name__ == '__main__':
 
   # discriminative
   # vcl
-  # model = model_pipeline(dvcl_pmnist, wandb_log=True)
+  model = model_pipeline(dvcl_pmnist, wandb_log=True)
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_nmnist, wandb_log=True)
   # si
@@ -178,5 +165,5 @@ if __name__ == '__main__':
   #
   sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
   # sweep_id = 'gacjzl7i'
-  sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-  wandb.agent(sweep_id, model_pipeline, project='vcl', count=200)
+  # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
+  # wandb.agent(sweep_id, model_pipeline, project='vcl', count=200)

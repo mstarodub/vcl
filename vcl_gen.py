@@ -24,8 +24,6 @@ class Dgm(Generative):
     classifier,
     layer_init_logstd_mean,
     layer_init_logstd_std,
-    bayesian_train_samples,
-    bayesian_test_samples,
   ):
     super().__init__(
       latent_dim=latent_dim,
@@ -34,10 +32,6 @@ class Dgm(Generative):
       learning_rate=learning_rate,
       classifier=classifier,
     )
-
-    self.bayesian_train_samples = bayesian_train_samples
-    self.bayesian_test_samples = bayesian_test_samples
-
     self.encoders = nn.ModuleList(
       nn.Sequential(
         nn.Linear(in_dim, hidden_dim),
@@ -118,17 +112,11 @@ class Dgm(Generative):
       orig, ta = batch_data
       orig, ta = orig.to(device), ta.to(device)
       self.zero_grad()
-      gen_mu_log_sigmas = [self(orig, ta) for _ in range(self.bayesian_train_samples)]
-      uncerts = torch.stack(
-        [
-          self.classifier.classifier_uncertainty(gmls[0], ta)
-          for gmls in gen_mu_log_sigmas
-        ]
+      gen, mu, log_sigma = self(orig, ta)
+      uncert = self.classifier.classifier(gen, ta)
+      loss = -self.elbo(gen, mu, log_sigma, orig) + self.compute_kl_loss() / len(
+        loader.dataset
       )
-      elbos = torch.stack(
-        [self.elbo(gmls[0], gmls[1], gmls[2], orig) for gmls in gen_mu_log_sigmas]
-      )
-      loss = -elbos.mean(0) + self.compute_kl_loss() / len(loader.dataset)
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and orig.shape[0] == self.batch_size:
@@ -136,7 +124,7 @@ class Dgm(Generative):
           'task': task,
           'epoch': epoch,
           'train/train_loss': loss,
-          'train/train_uncert': uncerts.mean(0),
+          'train/train_uncert': uncert,
         }
         self.wandb_log(metrics)
 
@@ -188,8 +176,6 @@ def generative_model_pipeline(params):
     batch_size=params.batch_size,
     layer_init_logstd_mean=params.layer_init_logstd_mean,
     layer_init_logstd_std=params.layer_init_logstd_std,
-    bayesian_train_samples=params.bayesian_train_samples,
-    bayesian_test_samples=params.bayesian_test_samples,
     learning_rate=params.learning_rate,
     classifier=classifier,
   ).to(torch_device())
