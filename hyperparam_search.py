@@ -14,8 +14,8 @@ def wrap_values(d):
 
 
 sweep = {
-  # random
-  'method': 'bayes',
+  # bayes
+  'method': 'random',
   # 'parameters': {
   #   'epochs': {'min': 20, 'max': 400},
   #   'batch_size': {'values': [256, 512, None]},
@@ -58,11 +58,11 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
       # [1, 10]
       'bayesian_train_samples': 1,
       # [0, 10, 30, 100]
-      'pretrain_epochs': 0,
+      'pretrain_epochs': [0, 10, 30, 100],
       # {'min': -32, 'max': 0}
-      'layer_init_logstd_mean': {'min': -32, 'max': -20},
+      'layer_init_logstd_mean': {'min': -26.0, 'max': -24.0},
       # [1e-1, 1e-2, 1e-3, 1e-5]
-      'layer_init_logstd_std': 1e-2,
+      'layer_init_logstd_std': [1e-1, 1e-2, 1e-3, 1e-5],
     }
   )
 }

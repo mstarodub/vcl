@@ -76,8 +76,11 @@ class Generative(nn.Module):
     return reconstr_likelihood - kl_loss
 
   def compute_test_ll(self, mu, log_sigma):
-    z_dist = torch.distributions.Normal(mu, torch.exp(log_sigma))
-    prior_dist = torch.distributions.Normal(torch.zeros_like())
+    # q(z|x)
+    q_z_dist = torch.distributions.Normal(mu, torch.exp(log_sigma))
+    # p(z)
+    prior_dist = torch.distributions.Normal(torch.zeros_like(), torch.ones_like(mu))
+    # samples =
     return torch.tensor(0)
 
   @torch.no_grad()

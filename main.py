@@ -177,6 +177,6 @@ if __name__ == '__main__':
   # so just run this inside __main__
   #
   sweep_params = hyperparam_search.sweep_dvcl_pmnist_nocoreset
-  sweep_id = 'gacjzl7i'
-  # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=['uay9wcw2'])
+  # sweep_id = 'gacjzl7i'
+  sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
   wandb.agent(sweep_id, model_pipeline, project='vcl', count=200)
