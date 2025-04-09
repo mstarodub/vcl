@@ -134,14 +134,10 @@ class Ddm(nn.Module):
     bli = 0
     for bl in self.shared:
       if isinstance(bl, BayesianLinear):
-        metrics[f'sigma/s_{bli}_sigma_w'] = (
-          torch.std(torch.exp(bl.log_sigma_w)).detach().item()
-        )
+        metrics[f'sigma/s_{bli}_sigma_w'] = bl.log_sigma_w.exp().mean().detach().item()
         bli += 1
     for hi, hl in enumerate(self.heads):
-      metrics[f'sigma/h_{hi}_sigma_w'] = (
-        torch.std(torch.exp(hl.log_sigma_w)).detach().item()
-      )
+      metrics[f'sigma/h_{hi}_sigma_w'] = hl.log_sigma_w.exp().mean().detach().item()
     wandb.log(metrics)
 
   # sample from (D_t) \cup C_{t-1}

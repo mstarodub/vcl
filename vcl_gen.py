@@ -164,16 +164,14 @@ class Dgm(Generative):
     sli = 0
     for sl in self.decoder_shared:
       if isinstance(sl, BayesianLinear):
-        metrics[f'sigma/s_{sli}_sigma_w'] = (
-          torch.std(torch.exp(sl.log_sigma_w)).detach().item()
-        )
+        metrics[f'sigma/s_{sli}_sigma_w'] = sl.log_sigma_w.exp().mean().detach().item()
         sli += 1
     for hi, head in enumerate(self.decoder_heads):
       hli = 0
       for hl in head:
         if isinstance(hl, BayesianLinear):
           metrics[f'sigma/h_{hi}_{hli}_sigma_w'] = (
-            torch.std(torch.exp(hl.log_sigma_w)).detach().item()
+            hl.log_sigma_w.exp().mean().detach().item()
           )
           hli += 1
     wandb.log(metrics)
