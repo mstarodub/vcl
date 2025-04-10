@@ -44,35 +44,58 @@ if __name__ == '__main__':
     learning_rate=1e-3,
     coreset_size=0,
     per_task_opt=False,
-    pretrain_epochs=30,
-    layer_init_logstd_mean=-25.77,
+    # try 10 / 30 - doesnt seem to be necessary?
+    pretrain_epochs=0,
+    layer_init_logstd_mean=-25,
     layer_init_logstd_std=0.01,
   )
-
-  # TODO
 
   dvcl_smnist = experiments.disc_smnist | dict(
     model='vcl',
     epochs=120,
     batch_size=None,
-    pretrain_epochs=0,
-    # 200
-    coreset_size=200,
-    per_task_opt=False,
-    layer_init_std=1e-3,
     learning_rate=1e-3,
+    pretrain_epochs=0,
+    coreset_size=0,
+    per_task_opt=True,
+    layer_init_logstd_mean=-3,
+    layer_init_logstd_std=0.01,
   )
 
   dvcl_nmnist = experiments.disc_nmnist | dict(
     model='vcl',
     epochs=120,
     batch_size=None,
+    learning_rate=1e-3,
     pretrain_epochs=0,
     coreset_size=0,
-    per_task_opt=False,
-    layer_init_std=1e-3,
-    learning_rate=1e-3,
+    per_task_opt=True,
+    layer_init_logstd_mean=-3,
+    layer_init_logstd_std=0.01,
   )
+
+  dsi_pmnist = experiments.disc_pmnist | dict(
+    model='si',
+    epochs=22,
+    # try None. weirdly sensitive
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.6242,
+    xi=0.2635,
+    per_task_opt=False,
+  )
+
+  dsi_smnist = experiments.disc_smnist | dict(
+    model='si',
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.99,
+    xi=0.04,
+    per_task_opt=True,
+  )
+
+  # TODO
 
   gvcl_mnist = experiments.gen_mnist | dict(
     model='vcl',
@@ -93,26 +116,6 @@ if __name__ == '__main__':
     layer_init_std=None,
     # 1e-4
     learning_rate=1e-3,
-  )
-
-  dsi_pmnist = experiments.disc_pmnist | dict(
-    model='si',
-    epochs=20,
-    batch_size=256,
-    learning_rate=1e-3,
-    c=0.1,
-    xi=0.1,
-    per_task_opt=False,
-  )
-
-  dsi_smnist = experiments.disc_smnist | dict(
-    model='si',
-    epochs=20,
-    batch_size=256,
-    learning_rate=1e-3,
-    c=0.1,
-    xi=0.1,
-    per_task_opt=True,
   )
 
   dsi_nmnist = experiments.disc_nmnist | dict(
@@ -149,7 +152,7 @@ if __name__ == '__main__':
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_nmnist, wandb_log=True)
   # si
-  # model = model_pipeline(dsi_pmnist, wandb_log=True)
+  ##model = model_pipeline(dsi_pmnist, wandb_log=True)
   # model = model_pipeline(dsi_smnist, wandb_log=True)
   # model = model_pipeline(dsi_nmnist, wandb_log=True)
 
@@ -166,8 +169,7 @@ if __name__ == '__main__':
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
-  #
   sweep_params = hyperparam_search.sweep_dsi_nmnist
-  sweep_id = 'wwkypv91'
+  sweep_id = 'mkd7z59j'
   # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-  # wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
+  wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)

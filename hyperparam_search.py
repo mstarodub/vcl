@@ -167,18 +167,38 @@ sweep_dvcl_nmnist = sweep_discriminative | {
 }
 
 sweep_dsi_nmnist = sweep_discriminative | {
+  'method': 'grid',
   'parameters': wrap_values(
     experiments.disc_nmnist
     | {
       'model': 'si',
       'batch_size': [None, 256],
       'learning_rate': 1e-3,
-      'per_task_opt': [True, False],
-      'epochs': {'min': 20, 'max': 60},
-      'c': {'min': 1e-4, 'max': 1.0},
-      'xi': {'min': 5e-3, 'max': 0.5},
+      'per_task_opt': True,
+      'epochs': [20, 25, 30, 60],
+      'c': list(map(float, np.arange(0, 1.05, 0.05))),
+      'xi': [
+        0.001,
+        0.005,
+        0.01,
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.6,
+        0.7,
+        0.8,
+        0.9,
+        1,
+      ],
     }
-  )
+  ),
 }
 
 sweep_gvcl_mnist = sweep_generative | {
@@ -239,34 +259,8 @@ sweep_gsi_nmnist = sweep_generative | {
   )
 }
 
-# gy/disc_pmnist_nocoreset:
-# mean, std, pretrain
-# -25, 0.01, 0
-# -17, 0.0001, 100
-# -25, 0.1, 30
-# -19, 0.001, 100
-# -17, 0.0001, 10
-# -18, 0.0001, 10
-# ua, ga/disc_pmnist_nocoreset:
-# -23 bis -25, 0.01, 0
-# np/disc_pmnist_nocoreset:
-# -24.5 bis -26, std egal, pre egal
-# => -15 - -26 gut
-# disc_pmnist_coreset:
-# kr: -20 bis -15 gut für large coresets
-# 9x
-#
-# si disc pmnist:
-# y3: epochs < 50
-#   xi: 0.1, try even more
-#   c: need more data
-# m0:
+# alles ab wwk neu
+# notmnist vcl, si: per task opt
+# for vcl:
 
-
-# vcl disc split mnist:
-# 4bq2a9ij
-# XXX forgot per task opt
-
-# si disc split mnist:
-# 10nhr6rw
-# XXX forgot per task opt
+# try generative local
