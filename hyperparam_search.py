@@ -172,62 +172,62 @@ sweep_dsi_nmnist = sweep_discriminative | {
     experiments.disc_nmnist
     | {
       'model': 'si',
-      'batch_size': [None, 256],
+      'batch_size': 256,
       'learning_rate': 1e-3,
       'per_task_opt': True,
-      'epochs': [20, 25, 30, 60],
-      'c': list(map(float, np.arange(0, 1.05, 0.05))),
+      'epochs': 20,
+      'c': list(map(float, np.arange(0, 1.05, 0.11))),
       'xi': [
-        0.001,
-        0.005,
-        0.01,
-        0.05,
-        0.1,
-        0.15,
-        0.2,
-        0.25,
-        0.3,
-        0.35,
-        0.4,
-        0.45,
-        0.5,
-        0.6,
-        0.7,
-        0.8,
-        0.9,
-        1,
+        1e-5,
+        5e-5,
+        1e-4,
+        5e-4,
+        1e-3,
+        2e-3,
+        3e-3,
       ],
     }
   ),
 }
 
 sweep_gvcl_mnist = sweep_generative | {
+  'method': 'grid',
   'parameters': wrap_values(
     experiments.gen_mnist
     | {
       'model': 'vcl',
       'batch_size': 256,
-      'epochs': 200,
+      'epochs': 20,
       'learning_rate': 1e-3,
-      'layer_init_logstd_mean': list(map(float, np.arange(-32, 0.5, 0.5))),
-      'layer_init_logstd_std': 0.1,
+      'layer_init_logstd_mean': [-25, -20, -15, -10, -5, -3, -1],
+      'layer_init_logstd_std': [0.01, 0.1],
     }
-  )
+  ),
 }
 
 sweep_gsi_mnist = sweep_generative | {
+  'method': 'grid',
   'parameters': wrap_values(
     experiments.gen_mnist
     | {
       'model': 'si',
       'batch_size': 256,
-      # XXX
-      'epochs': {'min': 20, 'max': 50},
+      'epochs': 20,
       'learning_rate': 1e-3,
-      'c': {'min': 1e-4, 'max': 1.0},
-      'xi': {'min': 5e-3, 'max': 0.5},
+      'c': list(map(float, np.arange(0, 1.05, 0.11))),
+      'xi': [
+        1e-5,
+        1e-4,
+        1e-3,
+        1e-2,
+        1e-1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+      ],
     }
-  )
+  ),
 }
 
 sweep_gvcl_nmnist = sweep_generative | {

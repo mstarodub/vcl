@@ -113,7 +113,7 @@ class Dgm(Generative):
       orig, ta = orig.to(device), ta.to(device)
       self.zero_grad()
       gen, mu, log_sigma = self(orig, ta)
-      uncert = self.classifier.classifier(gen, ta)
+      uncert = self.classifier.classifier_uncertainty(gen, ta)
       loss = -self.elbo(gen, mu, log_sigma, orig) + self.compute_kl_loss() / len(
         loader.dataset
       )

@@ -75,8 +75,12 @@ class Gsi(Generative):
       if isinstance(layer, SILayer)
     ]
 
+  @property
+  def shared_linear_layers(self):
+    return [layer for layer in list(self.decoder_shared) if isinstance(layer, SILayer)]
+
   def compute_surrogate_loss(self):
-    return self.c * sum(layer.surrogate_layer() for layer in self.linear_layers)
+    return self.c * sum(layer.surrogate_layer() for layer in self.shared_linear_layers)
 
   def train_epoch(self, loader, opt, task, epoch):
     self.train()

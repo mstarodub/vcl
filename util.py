@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
 import wandb
 from copy import deepcopy
+from timeit import default_timer as timer
+from functools import wraps
 
 
 # cursed (and ruff formatting makes it ugly)
@@ -33,6 +35,18 @@ class infix_operator:
         raise SyntaxError('Infix operator already has its right argument')
     else:
       return self.function(self.left, right)
+
+
+def timeit(func):
+  @wraps(func)
+  def wrapper(*args, **kwargs):
+    start = timer()
+    result = func(*args, **kwargs)
+    end = timer()
+    print(f'{func.__name__} took {end - start:.4f} seconds')
+    return result
+
+  return wrapper
 
 
 # '|' for dictionaries is not recursive!

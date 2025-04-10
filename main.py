@@ -76,12 +76,11 @@ if __name__ == '__main__':
 
   dsi_pmnist = experiments.disc_pmnist | dict(
     model='si',
-    epochs=22,
-    # try None. weirdly sensitive
+    epochs=20,
     batch_size=256,
     learning_rate=1e-3,
-    c=0.6242,
-    xi=0.2635,
+    c=0.6,
+    xi=0.25,
     per_task_opt=False,
   )
 
@@ -95,37 +94,34 @@ if __name__ == '__main__':
     per_task_opt=True,
   )
 
+  dsi_nmnist = experiments.disc_nmnist | dict(
+    model='si',
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.99,
+    xi=0.0005,
+    per_task_opt=True,
+  )
+
   # TODO
 
   gvcl_mnist = experiments.gen_mnist | dict(
     model='vcl',
-    # 200
-    epochs=5,
-    # 50
+    epochs=20,
     batch_size=256,
-    layer_init_std=None,
-    # 1e-4
     learning_rate=1e-3,
+    layer_init_logstd_mean=-3,
+    layer_init_logstd_std=0.01,
   )
 
   gvcl_nmnist = experiments.gen_nmnist | dict(
     model='vcl',
-    # 400
-    epochs=20,
-    batch_size=256,
-    layer_init_std=None,
-    # 1e-4
-    learning_rate=1e-3,
-  )
-
-  dsi_nmnist = experiments.disc_nmnist | dict(
-    model='si',
-    epochs=50,
+    epochs=40,
     batch_size=256,
     learning_rate=1e-3,
-    c=0.1,
-    xi=0.1,
-    per_task_opt=True,
+    layer_init_logstd_mean=-3,
+    layer_init_logstd_std=0.01,
   )
 
   gsi_mnist = experiments.gen_mnist | dict(
@@ -139,7 +135,7 @@ if __name__ == '__main__':
 
   gsi_nmnist = experiments.gen_nmnist | dict(
     model='si',
-    epochs=20,
+    epochs=40,
     batch_size=256,
     learning_rate=1e-3,
     c=0.1,
@@ -152,7 +148,7 @@ if __name__ == '__main__':
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_nmnist, wandb_log=True)
   # si
-  ##model = model_pipeline(dsi_pmnist, wandb_log=True)
+  # model = model_pipeline(dsi_pmnist, wandb_log=True)
   # model = model_pipeline(dsi_smnist, wandb_log=True)
   # model = model_pipeline(dsi_nmnist, wandb_log=True)
 
@@ -169,7 +165,7 @@ if __name__ == '__main__':
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
-  sweep_params = hyperparam_search.sweep_dsi_nmnist
-  sweep_id = 'mkd7z59j'
+  sweep_params = hyperparam_search.sweep_gsi_mnist
+  sweep_id = 'tymfsxmn'
   # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
   wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)

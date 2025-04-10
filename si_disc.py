@@ -53,6 +53,12 @@ class Dsi(nn.Module):
       self.heads
     )
 
+  @property
+  def shared_linear_layers(self):
+    return [layer for layer in self.shared if isinstance(layer, SILayer)] + (
+      list(self.heads) if not self.multihead else []
+    )
+
   def forward(self, x, task=None):
     x = self.shared(x)
     if self.multihead:
@@ -66,7 +72,7 @@ class Dsi(nn.Module):
       return self.heads[0](x)
 
   def compute_surrogate_loss(self):
-    return self.c * sum(layer.surrogate_layer() for layer in self.linear_layers)
+    return self.c * sum(layer.surrogate_layer() for layer in self.shared_linear_layers)
 
   def train_epoch(self, loader, opt, task, epoch):
     device = torch_device()

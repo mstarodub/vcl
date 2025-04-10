@@ -1,0 +1,4 @@
+- no label, only input is the data
+- want to add a head or select a known one 
+- idea: bayesian router?
+- idea: use bayesian heads?

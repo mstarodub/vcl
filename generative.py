@@ -7,7 +7,7 @@ from tqdm.auto import tqdm
 
 import dataloaders
 import accuracy
-from util import torch_device
+from util import torch_device, timeit
 
 
 class Generative(nn.Module):
@@ -76,7 +76,8 @@ class Generative(nn.Module):
     return reconstr_likelihood - kl_loss
 
   def compute_test_ll(self, orig, ta, mu, log_sigma):
-    num_samples = 5_000
+    # num_samples = 5_000: compute_test_ll took 197.9113 seconds
+    num_samples = 10
     batch_size = orig.shape[0]
     # q(z|x)
     q_z_dist = torch.distributions.Normal(mu, torch.exp(log_sigma))
@@ -88,9 +89,10 @@ class Generative(nn.Module):
     z_samples_flat = z_samples.reshape(-1, self.latent_dim)
     gen_flat = self.decode(z_samples_flat, ta.repeat(num_samples))
     gen = gen_flat.reshape(num_samples, batch_size, -1)
-    # p(x|z, θ)
-    dist = torch.distributions.Bernoulli(probs=gen)
-    log_p_x_z = dist.log_prob(orig).sum(dim=-1)
+    # p(x|z, θ) - pseudo likelihood
+    log_p_x_z = -F.binary_cross_entropy(
+      gen, orig.expand(num_samples, -1, -1), reduction='none'
+    ).sum(dim=-1)
     log_p_z = prior_dist.log_prob(z_samples).sum(dim=-1)
     log_q_z_x = q_z_dist.log_prob(z_samples).sum(dim=-1)
     log_weights = log_p_x_z + log_p_z - log_q_z_x
