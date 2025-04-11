@@ -9,7 +9,7 @@ import util
 from util import torch_device
 from bayesian_layer import BayesianLinear
 import generative
-from generative import Generative
+from generative import Generative, elbo
 
 
 class Dgm(Generative):
@@ -49,8 +49,8 @@ class Dgm(Generative):
         layer_init_logstd_mean,
         layer_init_logstd_std,
       ),
-      nn.ReLU(),
     )
+    # no activation in between, this is accounted for in generative.decode
     self.decoder_heads = nn.ModuleList(
       nn.Sequential(
         BayesianLinear(
@@ -99,8 +99,7 @@ class Dgm(Generative):
       orig, ta = orig.to(device), ta.to(device)
       self.zero_grad()
       gen, mu, log_sigma = self(orig, ta)
-      uncert = self.classifier.classifier_uncertainty(gen, ta)
-      loss = -self.elbo(gen, mu, log_sigma, orig) + self.compute_kl_loss() / len(
+      loss = -elbo(gen, mu, log_sigma, orig) + self.compute_kl_loss() / len(
         loader.dataset
       )
       loss.backward()
@@ -110,7 +109,6 @@ class Dgm(Generative):
           'task': task,
           'epoch': epoch,
           'train/train_loss': loss,
-          'train/train_uncert': uncert,
         }
         self.wandb_log(metrics)
 

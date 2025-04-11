@@ -132,9 +132,9 @@ class Ddm(nn.Module):
     # p(target | pred) = exp(pred_target) / sum_{i=0}^len(pred) exp(pred_i)
     # according to (3) in the local reparam paper, we apply the log,
     # and arrive at the l_n from https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss
-    # we use reduction=mean (the default) to get the 1/M factor and the outer sum,
+    # we use reduction=mean to get the 1/M factor and the outer sum,
     # and finally arrive at eq (3) without the N factor
-    return -F.cross_entropy(pred, target)
+    return -F.cross_entropy(pred, target, reduction='mean')
 
   def wandb_log(self, metrics):
     bli = 0

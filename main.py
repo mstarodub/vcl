@@ -111,7 +111,7 @@ if __name__ == '__main__':
     epochs=20,
     batch_size=256,
     learning_rate=1e-3,
-    layer_init_logstd_mean=-3,
+    layer_init_logstd_mean=-6,
     layer_init_logstd_std=0.01,
   )
 
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     epochs=40,
     batch_size=256,
     learning_rate=1e-3,
-    layer_init_logstd_mean=-3,
+    layer_init_logstd_mean=-6,
     layer_init_logstd_std=0.01,
   )
 

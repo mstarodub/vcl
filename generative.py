@@ -81,6 +81,7 @@ class Generative(nn.Module):
     if self.architecture == 2:
       # shared
       h = self.decoder_shared(z)
+      h = F.relu(h)
       # followed by heads
       x_prime = torch.zeros(
         curr_batch_size,
@@ -102,6 +103,7 @@ class Generative(nn.Module):
       for head_idx, head in enumerate(self.decoder_heads):
         mask = task == head_idx
         h += head(z) * mask.unsqueeze(1)
+      h = F.relu(h)
       # followed by shared
       x_prime = self.decoder_shared(h)
     return F.sigmoid(x_prime)
@@ -115,12 +117,6 @@ class Generative(nn.Module):
   def forward(self, x, task):
     z, mu, log_sigma = self.encode(x, task)
     return self.decode(z, task), mu, log_sigma
-
-  # we don't scale this by the batch_size, instead one should change learning_rate
-  def elbo(self, gen, mu, log_sigma, orig):
-    reconstr_likelihood = -F.binary_cross_entropy(gen, orig, reduction='mean')
-    kl_loss = -0.5 * torch.mean(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
-    return reconstr_likelihood - kl_loss
 
   def compute_test_ll(self, orig, ta, mu, log_sigma):
     # num_samples = 5_000: compute_test_ll took 197.9113 seconds
@@ -198,6 +194,14 @@ class Generative(nn.Module):
         dim=2,
       )
     )
+
+
+def elbo(gen, mu, log_sigma, orig):
+  batch_size = orig.shape[0]
+  reconstr_likelihood = -F.binary_cross_entropy(gen, orig, reduction='sum')
+  # kl_div_gaussians, but (mu_2, sigma_2) == (0, 1)
+  kl_loss = -0.5 * torch.sum(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
+  return (reconstr_likelihood - kl_loss) / batch_size
 
 
 def get_loaders_classifier(params):

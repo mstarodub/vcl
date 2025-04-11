@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 from tqdm.auto import trange
 
@@ -8,6 +7,7 @@ import util
 from util import torch_device
 import dataloaders
 import accuracy
+from generative import elbo
 
 
 class Vae(nn.Module):
@@ -50,29 +50,20 @@ class Vae(nn.Module):
     z = mu + torch.exp(log_sigma) * eps
     return self.decoder(z), mu, log_sigma
 
-  def elbo(self, mu, log_sigma, gen, orig):
-    reconstr_likelihood = -F.binary_cross_entropy(gen, orig, reduction='sum')
-    # reconstr_likelihood = -F.mse_loss(gen, orig, reduction='mean')
-    # kl_div_gaussians, but (mu_2, sigma_2) == (0, 1)
-    kl_loss = -0.5 * torch.sum(1 - mu**2 + (2 * log_sigma) - torch.exp(2 * log_sigma))
-    return reconstr_likelihood - kl_loss
-
   def train_epoch(self, loader, opt):
     device = torch_device()
     self.train()
-    losses, uncertainties = [], []
+    losses = []
     for batch_data in loader:
       data, target = batch_data[0], batch_data[1]
       data, target = data.to(device), target.to(device)
       opt.zero_grad()
       gen, mu, log_sigma = self(data)
-      loss = -self.elbo(mu, log_sigma, gen, data)
-      uncert = self.classifier.classifier_uncertainty(gen, target)
+      loss = -elbo(mu, log_sigma, gen, data)
       loss.backward()
       opt.step()
       losses.append(loss.item())
-      uncertainties.append(uncert.item())
-    return np.mean(losses), np.mean(uncertainties)
+    return np.mean(losses)
 
   @torch.no_grad()
   def test_run(self, loader):
@@ -92,11 +83,10 @@ class Vae(nn.Module):
   def train_run(self, train_loader, test_loader, num_epochs):
     opt = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
     for epoch in (pbar := trange(num_epochs)):
-      train_loss, train_uncert = self.train_epoch(train_loader, opt)
-      test_loss, test_uncert = self.test_run(test_loader)
-      pbar.set_description(
-        f'epoch {epoch}: train loss {train_loss:.4f} test loss {test_loss:.4f} train uncert {train_uncert:.4f} test uncert {test_uncert:.4f}'
-      )
+      train_loss = self.train_epoch(train_loader, opt)
+      util.show_imgs(util.samples(self, upto_task=9, multihead=False))
+      pbar.set_description(f'epoch {epoch}: train loss {train_loss:.4f}')
+    test_loss, test_uncert = self.test_run(test_loader)
 
   @torch.no_grad()
   def sample(self):
@@ -108,9 +98,9 @@ class Vae(nn.Module):
 def baseline_generative_model(num_epochs, problem):
   loaders = None
   if problem == 'mnist':
-    loaders = dataloaders.mnist_vanilla_task_loaders(batch_size=128)
+    loaders = dataloaders.mnist_vanilla_task_loaders(batch_size=256)
   if problem == 'nmnist':
-    loaders = dataloaders.nmnist_vanilla_task_loaders(batch_size=128)
+    loaders = dataloaders.nmnist_vanilla_task_loaders(batch_size=256)
   classifier = accuracy.init_classifier(problem)
 
   model = Vae(
@@ -123,5 +113,4 @@ def baseline_generative_model(num_epochs, problem):
 
   train_loader, test_loader = loaders
   model.train_run(train_loader, test_loader, num_epochs=num_epochs)
-  util.show_imgs(util.samples(model, upto_task=9, multihead=False))
   return model

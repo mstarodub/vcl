@@ -9,7 +9,7 @@ import util
 from util import torch_device
 from si_layer import SILayer
 import generative
-from generative import Generative
+from generative import Generative, elbo
 
 
 class Gsi(Generative):
@@ -44,7 +44,6 @@ class Gsi(Generative):
       SILayer(*self.dec_shared_l1),
       nn.ReLU(),
       SILayer(*self.dec_shared_l2),
-      nn.ReLU(),
     )
 
     self.decoder_heads = nn.ModuleList(
@@ -81,7 +80,7 @@ class Gsi(Generative):
       self.zero_grad()
       gen, mu, log_sigma = self(orig, ta)
       uncert = self.classifier.classifier_uncertainty(gen, ta)
-      loss = -self.elbo(gen, mu, log_sigma, orig) + self.compute_surrogate_loss()
+      loss = -elbo(gen, mu, log_sigma, orig) + self.compute_surrogate_loss()
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and orig.shape[0] == self.batch_size:
