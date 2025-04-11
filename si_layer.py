@@ -34,6 +34,9 @@ class SILayer(nn.Linear):
   # update w_k
   @torch.no_grad()
   def update_importance(self):
+    # unsure about this. we approximate the parameter update by just taking the difference,
+    # effectively pushing the 1/step_size factor into the c
+    # however, adam step size is not constant which might pose an issue
     self.importance_weight += -self.weight.grad * (self.weight - self.weight_old)
     self.importance_bias += -self.bias.grad * (self.bias - self.bias_old)
 
