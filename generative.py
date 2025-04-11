@@ -7,13 +7,16 @@ from tqdm.auto import tqdm
 
 import dataloaders
 import accuracy
-from util import torch_device, timeit
+from util import torch_device
 
 
 class Generative(nn.Module):
   def __init__(
     self,
+    in_dim,
+    hidden_dim,
     latent_dim,
+    architecture,
     ntasks,
     batch_size,
     learning_rate,
@@ -27,6 +30,34 @@ class Generative(nn.Module):
     self.learning_rate = learning_rate
     self.classifier = classifier
     self.logging_every = logging_every
+    self.architecture = architecture
+
+    self.encoders = nn.ModuleList(
+      nn.Sequential(
+        nn.Linear(in_dim, hidden_dim),
+        nn.ReLU(),
+        nn.Linear(hidden_dim, hidden_dim),
+        nn.ReLU(),
+        nn.Linear(hidden_dim, hidden_dim),
+        nn.ReLU(),
+        nn.Linear(hidden_dim, 2 * latent_dim),
+      )
+      for _ in range(ntasks)
+    )
+
+    latent_to_hidden = (latent_dim, hidden_dim)
+    hidden_to_hidden = (hidden_dim, hidden_dim)
+    hidden_to_in = (hidden_dim, in_dim)
+    if architecture == 1:
+      self.dec_heads_l1 = latent_to_hidden
+      self.dec_heads_l2 = hidden_to_hidden
+      self.dec_shared_l1 = hidden_to_hidden
+      self.dec_shared_l2 = hidden_to_in
+    if architecture == 2:
+      self.dec_shared_l1 = latent_to_hidden
+      self.dec_shared_l2 = hidden_to_hidden
+      self.dec_heads_l1 = hidden_to_hidden
+      self.dec_heads_l2 = hidden_to_in
 
   def encode(self, x, task):
     curr_batch_size = x.shape[0]
@@ -46,18 +77,34 @@ class Generative(nn.Module):
     return z, mu, log_sigma
 
   def decode(self, z, task):
-    curr_batch_size = z.shape[0]
-    h = self.decoder_shared(z)
-    scatter_heads = torch.zeros(
-      curr_batch_size,
-      self.decoder_heads[0][-2].out_dim,
-      device=z.device,
-      dtype=z.dtype,
-    )
-    for head_idx, head in enumerate(self.decoder_heads):
-      mask = task == head_idx
-      scatter_heads += head(h) * mask.unsqueeze(1)
-    return scatter_heads
+    curr_batch_size, x_prime = z.shape[0], None
+    if self.architecture == 2:
+      # shared
+      h = self.decoder_shared(z)
+      # followed by heads
+      x_prime = torch.zeros(
+        curr_batch_size,
+        self.dec_heads_l2[1],
+        device=z.device,
+        dtype=z.dtype,
+      )
+      for head_idx, head in enumerate(self.decoder_heads):
+        mask = task == head_idx
+        x_prime += head(h) * mask.unsqueeze(1)
+    if self.architecture == 1:
+      # heads
+      h = torch.zeros(
+        curr_batch_size,
+        self.dec_heads_l2[1],
+        device=z.device,
+        dtype=z.dtype,
+      )
+      for head_idx, head in enumerate(self.decoder_heads):
+        mask = task == head_idx
+        h += head(z) * mask.unsqueeze(1)
+      # followed by shared
+      x_prime = self.decoder_shared(h)
+    return F.sigmoid(x_prime)
 
   @torch.no_grad()
   def sample(self, digit):

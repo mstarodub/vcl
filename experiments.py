@@ -36,6 +36,7 @@ gen_mnist = dict(
   hidden_dim=500,
   latent_dim=50,
   ntasks=10,
+  architecture=1,
   problem='mnist',
   experiment='generative',
 )
@@ -45,6 +46,7 @@ gen_nmnist = dict(
   hidden_dim=500,
   latent_dim=50,
   ntasks=10,
+  architecture=1,
   problem='nmnist',
   experiment='generative',
 )

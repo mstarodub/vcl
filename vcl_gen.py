@@ -18,6 +18,7 @@ class Dgm(Generative):
     in_dim,
     hidden_dim,
     latent_dim,
+    architecture,
     ntasks,
     batch_size,
     learning_rate,
@@ -26,58 +27,43 @@ class Dgm(Generative):
     layer_init_logstd_std,
   ):
     super().__init__(
+      in_dim=in_dim,
+      hidden_dim=hidden_dim,
       latent_dim=latent_dim,
+      architecture=architecture,
       ntasks=ntasks,
       batch_size=batch_size,
       learning_rate=learning_rate,
       classifier=classifier,
     )
-    self.encoders = nn.ModuleList(
-      nn.Sequential(
-        nn.Linear(in_dim, hidden_dim),
-        nn.ReLU(),
-        nn.Linear(hidden_dim, hidden_dim),
-        nn.ReLU(),
-        nn.Linear(hidden_dim, hidden_dim),
-        nn.ReLU(),
-        nn.Linear(hidden_dim, 2 * latent_dim),
-      )
-      for _ in range(ntasks)
-    )
 
     self.decoder_shared = nn.Sequential(
       BayesianLinear(
-        latent_dim,
-        hidden_dim,
+        *self.dec_shared_l1,
         layer_init_logstd_mean,
         layer_init_logstd_std,
       ),
       nn.ReLU(),
       BayesianLinear(
-        hidden_dim,
-        hidden_dim,
+        *self.dec_shared_l2,
         layer_init_logstd_mean,
         layer_init_logstd_std,
       ),
       nn.ReLU(),
     )
-
     self.decoder_heads = nn.ModuleList(
       nn.Sequential(
         BayesianLinear(
-          hidden_dim,
-          hidden_dim,
+          *self.dec_heads_l1,
           layer_init_logstd_mean,
           layer_init_logstd_std,
         ),
         nn.ReLU(),
         BayesianLinear(
-          hidden_dim,
-          in_dim,
+          *self.dec_heads_l2,
           layer_init_logstd_mean,
           layer_init_logstd_std,
         ),
-        nn.Sigmoid(),
       )
       for _ in range(ntasks)
     )
@@ -172,6 +158,7 @@ def generative_model_pipeline(params):
     in_dim=params.in_dim,
     hidden_dim=params.hidden_dim,
     latent_dim=params.latent_dim,
+    architecture=params.architecture,
     ntasks=params.ntasks,
     batch_size=params.batch_size,
     layer_init_logstd_mean=params.layer_init_logstd_mean,

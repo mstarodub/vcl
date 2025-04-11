@@ -142,6 +142,7 @@ if __name__ == '__main__':
     xi=0.1,
   )
 
+  model = None
   # discriminative
   # vcl
   # model = model_pipeline(dvcl_pmnist, wandb_log=True)
@@ -151,7 +152,6 @@ if __name__ == '__main__':
   # model = model_pipeline(dsi_pmnist, wandb_log=True)
   # model = model_pipeline(dsi_smnist, wandb_log=True)
   # model = model_pipeline(dsi_nmnist, wandb_log=True)
-
   # generative
   # vae
   # model = baseline_generative_model(num_epochs=5, problem='mnist')
@@ -165,7 +165,9 @@ if __name__ == '__main__':
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
-  sweep_params = hyperparam_search.sweep_gsi_mnist
-  sweep_id = 'tymfsxmn'
-  # sweep_id = wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-  wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
+  if not model:
+    if sweep_id := 'cmen5gh0':
+      wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
+    else:
+      sweep_params = hyperparam_search.sweep_gvcl_mnist
+      wandb.sweep(sweep_params, project='vcl', prior_runs=[])

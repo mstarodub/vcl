@@ -18,6 +18,7 @@ class Gsi(Generative):
     in_dim,
     hidden_dim,
     latent_dim,
+    architecture,
     ntasks,
     batch_size,
     learning_rate,
@@ -26,7 +27,10 @@ class Gsi(Generative):
     xi,
   ):
     super().__init__(
+      in_dim=in_dim,
+      hidden_dim=hidden_dim,
       latent_dim=latent_dim,
+      architecture=architecture,
       ntasks=ntasks,
       batch_size=batch_size,
       learning_rate=learning_rate,
@@ -36,32 +40,18 @@ class Gsi(Generative):
     self.c = c
     self.xi = xi
 
-    self.encoders = nn.ModuleList(
-      nn.Sequential(
-        nn.Linear(in_dim, hidden_dim),
-        nn.ReLU(),
-        nn.Linear(hidden_dim, hidden_dim),
-        nn.ReLU(),
-        nn.Linear(hidden_dim, hidden_dim),
-        nn.ReLU(),
-        nn.Linear(hidden_dim, 2 * latent_dim),
-      )
-      for _ in range(ntasks)
-    )
-
     self.decoder_shared = nn.Sequential(
-      SILayer(latent_dim, hidden_dim),
+      SILayer(*self.dec_shared_l1),
       nn.ReLU(),
-      SILayer(hidden_dim, hidden_dim),
+      SILayer(*self.dec_shared_l2),
       nn.ReLU(),
     )
 
     self.decoder_heads = nn.ModuleList(
       nn.Sequential(
-        SILayer(hidden_dim, hidden_dim),
+        SILayer(*self.dec_heads_l1),
         nn.ReLU(),
-        SILayer(hidden_dim, in_dim),
-        nn.Sigmoid(),
+        SILayer(*self.dec_heads_l2),
       )
       for _ in range(ntasks)
     )
@@ -137,6 +127,7 @@ def generative_model_pipeline(params):
     in_dim=params.in_dim,
     hidden_dim=params.hidden_dim,
     latent_dim=params.latent_dim,
+    architecture=params.architecture,
     ntasks=params.ntasks,
     batch_size=params.batch_size,
     learning_rate=params.learning_rate,

@@ -200,7 +200,7 @@ sweep_gvcl_mnist = sweep_generative | {
       'epochs': 20,
       'learning_rate': 1e-3,
       'layer_init_logstd_mean': [-25, -20, -15, -10, -5, -3, -1],
-      'layer_init_logstd_std': [0.01, 0.1],
+      'layer_init_logstd_std': 0.1,
     }
   ),
 }
