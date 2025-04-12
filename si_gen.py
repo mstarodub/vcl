@@ -79,7 +79,6 @@ class Gsi(Generative):
       orig, ta = orig.to(device), ta.to(device)
       self.zero_grad()
       gen, mu, log_sigma = self(orig, ta)
-      uncert = self.classifier.classifier_uncertainty(gen, ta)
       loss = -elbo(gen, mu, log_sigma, orig) + self.compute_surrogate_loss()
       loss.backward()
       opt.step()
@@ -88,7 +87,6 @@ class Gsi(Generative):
           'task': task,
           'epoch': epoch,
           'train/train_loss': loss,
-          'train/train_uncert': uncert,
         }
         wandb.log(metrics)
 

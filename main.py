@@ -166,8 +166,8 @@ if __name__ == '__main__':
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
   if not model:
-    if sweep_id := 'cmen5gh0':
+    if sweep_id := '5chct0jg':
       wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
     else:
-      sweep_params = hyperparam_search.sweep_gvcl_mnist
+      sweep_params = hyperparam_search.sweep_gsi_mnist
       wandb.sweep(sweep_params, project='vcl', prior_runs=[])

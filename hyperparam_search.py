@@ -16,33 +16,24 @@ def wrap_values(d):
 
 
 sweep = {
-  # bayes
   'method': 'random',
-  # 'parameters': {
-  #   'epochs': {'min': 20, 'max': 400},
-  #   'batch_size': {'values': [256, 512, None]},
-  #   'learning_rate': {'values': [1e-3, 5e-4, 1e-4]},
-  # },
-  # 'early_terminate': {
-  #   'type': 'hyperband',
-  #   'min_iter': 2,
-  #   'eta': 2,
-  # },
 }
-
 sweep_discriminative = sweep | {
   'metric': {
     'name': 'test/test_acc',
     'goal': 'maximize',
   }
 }
-
 sweep_generative = sweep | {
   'metric': {
     'name': 'test/test_uncert',
     'goal': 'minimize',
   }
 }
+
+# the following configurations do not represent
+# all values searched. i often did multiple runs, seeing which
+# perform well to iteratively restrict the search space in new runs
 
 sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
   'parameters': wrap_values(
@@ -53,13 +44,10 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
       'epochs': 100,
       'learning_rate': 1e-3,
       'coreset_size': 0,
-      # [True, False],
-      'per_task_opt': False,
-      # [0, 10, 30, 100]
+      'per_task_opt': [True, False],
       'pretrain_epochs': [0, 10, 30, 100],
       # {'min': -32, 'max': 0}
       'layer_init_logstd_mean': {'min': -26.0, 'max': -24.0},
-      # [1e-1, 1e-2, 1e-3, 1e-5]
       'layer_init_logstd_std': [1e-1, 1e-2, 1e-3, 1e-5],
     }
   )
@@ -74,17 +62,17 @@ sweep_dvcl_pmnist_coreset = sweep_discriminative | {
       'epochs': 100,
       'learning_rate': 1e-3,
       'coreset_size': [
-        # 200,
-        # 500,
-        # 1_000,
-        # 2_000,
-        # 3_000,
-        # 4_000,
-        # 5_000,
-        # 7_500,
-        # 10_000,
-        # 12_500,
-        # 15_000,
+        200,
+        500,
+        1_000,
+        2_000,
+        3_000,
+        4_000,
+        5_000,
+        7_500,
+        10_000,
+        12_500,
+        15_000,
         20_000,
         30_000,
         40_000,
@@ -125,7 +113,6 @@ sweep_dvcl_smnist = sweep_discriminative | {
       'coreset_size': 0,
       'per_task_opt': [True, False],
       'pretrain_epochs': 0,
-      # {'min': -32, 'max': 0}
       'layer_init_logstd_mean': list(map(float, np.arange(-32, 0.5, 0.5))),
       'layer_init_logstd_std': 0.1,
     }
@@ -159,7 +146,6 @@ sweep_dvcl_nmnist = sweep_discriminative | {
       'coreset_size': 0,
       'per_task_opt': [True, False],
       'pretrain_epochs': 0,
-      # {'min': -32, 'max': 0}
       'layer_init_logstd_mean': list(map(float, np.arange(-32, 0.5, 0.5))),
       'layer_init_logstd_std': 0.1,
     }
@@ -199,7 +185,22 @@ sweep_gvcl_mnist = sweep_generative | {
       'batch_size': 256,
       'epochs': 20,
       'learning_rate': 1e-3,
-      'layer_init_logstd_mean': [-25, -20, -15, -10, -5, -3, -1],
+      'layer_init_logstd_mean': [
+        -25,
+        -20,
+        -17,
+        -15,
+        -12,
+        -11,
+        -10,
+        -9,
+        -8,
+        -6,
+        -5,
+        -4,
+        -3,
+        -2,
+      ],
       'layer_init_logstd_std': 0.1,
     }
   ),
@@ -236,9 +237,24 @@ sweep_gvcl_nmnist = sweep_generative | {
     | {
       'model': 'vcl',
       'batch_size': 256,
-      'epochs': 400,
+      'epochs': 40,
       'learning_rate': 1e-3,
-      'layer_init_logstd_mean': list(map(float, np.arange(-32, 0.5, 0.5))),
+      'layer_init_logstd_mean': [
+        -25,
+        -20,
+        -17,
+        -15,
+        -12,
+        -11,
+        -10,
+        -9,
+        -8,
+        -6,
+        -5,
+        -4,
+        -3,
+        -2,
+      ],
       'layer_init_logstd_std': 0.1,
     }
   )
@@ -250,17 +266,22 @@ sweep_gsi_nmnist = sweep_generative | {
     | {
       'model': 'si',
       'batch_size': 256,
-      # XXX
-      'epochs': {'min': 20, 'max': 50},
+      'epochs': 40,
       'learning_rate': 1e-3,
-      'c': {'min': 1e-4, 'max': 1.0},
-      'xi': {'min': 5e-3, 'max': 0.5},
+      'c': list(map(float, np.arange(0, 1.05, 0.11))),
+      'xi': [
+        1e-5,
+        1e-4,
+        1e-3,
+        1e-2,
+        1e-1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+      ],
     }
   )
 }
 
 # alles ab wwk neu
-# notmnist vcl, si: per task opt
-# for vcl:
-
-# try generative local
