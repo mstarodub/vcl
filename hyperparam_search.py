@@ -232,6 +232,7 @@ sweep_gsi_mnist = sweep_generative | {
 }
 
 sweep_gvcl_nmnist = sweep_generative | {
+  'method': 'grid',
   'parameters': wrap_values(
     experiments.gen_nmnist
     | {
@@ -240,16 +241,14 @@ sweep_gvcl_nmnist = sweep_generative | {
       'epochs': 40,
       'learning_rate': 1e-3,
       'layer_init_logstd_mean': [
-        -25,
         -20,
-        -17,
         -15,
-        -12,
-        -11,
         -10,
         -9,
         -8,
+        -7,
         -6,
+        -5.5,
         -5,
         -4,
         -3,
@@ -257,10 +256,11 @@ sweep_gvcl_nmnist = sweep_generative | {
       ],
       'layer_init_logstd_std': 0.1,
     }
-  )
+  ),
 }
 
 sweep_gsi_nmnist = sweep_generative | {
+  'method': 'grid',
   'parameters': wrap_values(
     experiments.gen_nmnist
     | {
@@ -268,20 +268,15 @@ sweep_gsi_nmnist = sweep_generative | {
       'batch_size': 256,
       'epochs': 40,
       'learning_rate': 1e-3,
-      'c': list(map(float, np.arange(0, 1.05, 0.11))),
+      'c': [0] + list(map(float, np.arange(0.1, 1.05, 0.3))) + [0.99],
       'xi': [
         1e-5,
         1e-4,
         1e-3,
         1e-2,
         1e-1,
-        0.2,
         0.3,
-        0.4,
-        0.5,
       ],
     }
-  )
+  ),
 }
-
-# alles ab wwk neu

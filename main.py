@@ -104,15 +104,13 @@ if __name__ == '__main__':
     per_task_opt=True,
   )
 
-  # TODO
-
   gvcl_mnist = experiments.gen_mnist | dict(
     model='vcl',
     epochs=20,
     batch_size=256,
     learning_rate=1e-3,
-    layer_init_logstd_mean=-6,
-    layer_init_logstd_std=0.01,
+    layer_init_logstd_mean=-5,
+    layer_init_logstd_std=0.1,
   )
 
   gvcl_nmnist = experiments.gen_nmnist | dict(
@@ -120,8 +118,8 @@ if __name__ == '__main__':
     epochs=40,
     batch_size=256,
     learning_rate=1e-3,
-    layer_init_logstd_mean=-6,
-    layer_init_logstd_std=0.01,
+    layer_init_logstd_mean=-5,
+    layer_init_logstd_std=0.1,
   )
 
   gsi_mnist = experiments.gen_mnist | dict(
@@ -129,8 +127,8 @@ if __name__ == '__main__':
     epochs=20,
     batch_size=256,
     learning_rate=1e-3,
-    c=0.1,
-    xi=0.1,
+    c=0.88,
+    xi=0.0001,
   )
 
   gsi_nmnist = experiments.gen_nmnist | dict(
@@ -138,8 +136,8 @@ if __name__ == '__main__':
     epochs=40,
     batch_size=256,
     learning_rate=1e-3,
-    c=0.1,
-    xi=0.1,
+    c=1,
+    xi=0.00001,
   )
 
   model = None
@@ -165,9 +163,7 @@ if __name__ == '__main__':
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
-  if not model:
-    if sweep_id := '5chct0jg':
-      wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
-    else:
-      sweep_params = hyperparam_search.sweep_gsi_mnist
-      wandb.sweep(sweep_params, project='vcl', prior_runs=[])
+  if not model and (sweep_id := None):
+    wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
+  if not model and (sweep_params := None):
+    wandb.sweep(sweep_params, project='vcl', prior_runs=[])
