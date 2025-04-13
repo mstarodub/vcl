@@ -78,34 +78,31 @@ class Generative(nn.Module):
 
   def decode(self, z, task):
     curr_batch_size, x_prime = z.shape[0], None
+
+    def heads(inp):
+      out = torch.zeros(
+        curr_batch_size,
+        self.dec_heads_l2[1],
+        device=z.device,
+        dtype=z.dtype,
+      )
+      for head_idx, head in enumerate(self.decoder_heads):
+        mask = task == head_idx
+        out += head(inp) * mask.unsqueeze(1)
+      return out
+
+    if self.architecture == 1:
+      # heads
+      h = heads(z)
+      h = F.relu(h)
+      # followed by shared
+      x_prime = self.decoder_shared(h)
     if self.architecture == 2:
       # shared
       h = self.decoder_shared(z)
       h = F.relu(h)
       # followed by heads
-      x_prime = torch.zeros(
-        curr_batch_size,
-        self.dec_heads_l2[1],
-        device=z.device,
-        dtype=z.dtype,
-      )
-      for head_idx, head in enumerate(self.decoder_heads):
-        mask = task == head_idx
-        x_prime += head(h) * mask.unsqueeze(1)
-    if self.architecture == 1:
-      # heads
-      h = torch.zeros(
-        curr_batch_size,
-        self.dec_heads_l2[1],
-        device=z.device,
-        dtype=z.dtype,
-      )
-      for head_idx, head in enumerate(self.decoder_heads):
-        mask = task == head_idx
-        h += head(z) * mask.unsqueeze(1)
-      h = F.relu(h)
-      # followed by shared
-      x_prime = self.decoder_shared(h)
+      x_prime = heads(h)
     return F.sigmoid(x_prime)
 
   @torch.no_grad()
