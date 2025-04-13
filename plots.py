@@ -11,6 +11,47 @@ metrics = (
   + [f'test/test_acc_task_{i}' for i in range(10)]
 )
 
+# pmnist
+# vcl nocoreset
+# r09vadzh
+# vcl coreset
+# si
+# baseline cata forgetting
+
+# smnist
+# vcl
+# si
+# baseline
+# baseline cata forgetting
+
+# nmnist
+# vcl
+# si
+# baseline
+# baseline cata forgetting
+
+### (generative)
+
+# mnist
+# vcl
+# 7ei1kvx5
+# si
+# lfq5zvai
+# arch2 perfect
+# adz84vfv
+# baseline cata forgetting
+# TODO
+
+# nmnist
+# vcl
+# 6fb6ibf8
+# si
+# 0n1bb5zu
+# arch2 perfect
+# TODO
+# baseline cata forgetting
+# ohbbj5vm
+
 
 def download_media(run, metric):
   history = run.scan_history(keys=[metric], page_size=1_000_000)
