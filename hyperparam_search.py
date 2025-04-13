@@ -45,10 +45,11 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
       'learning_rate': 1e-3,
       'coreset_size': 0,
       'per_task_opt': [True, False],
-      'pretrain_epochs': [0, 10, 30, 100],
+      'pretrain_epochs': [0, 10, 100],
       # {'min': -32, 'max': 0}
-      'layer_init_logstd_mean': {'min': -26.0, 'max': -24.0},
-      'layer_init_logstd_std': [1e-1, 1e-2, 1e-3, 1e-5],
+      'layer_init_logstd_mean': {'min': -26.0, 'max': -1.0},
+      # [1e-1, 1e-2, 1e-3, 1e-5]
+      'layer_init_logstd_std': 0.01,
     }
   )
 }

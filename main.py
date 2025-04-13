@@ -44,9 +44,21 @@ if __name__ == '__main__':
     learning_rate=1e-3,
     coreset_size=0,
     per_task_opt=False,
-    # try 10 / 30 - doesnt seem to be necessary?
-    pretrain_epochs=0,
+    # doesnt seem to be neccessary?
+    pretrain_epochs=10,
     layer_init_logstd_mean=-25,
+    layer_init_logstd_std=0.01,
+  )
+
+  dvcl_pmnist_coreset = experiments.disc_pmnist | dict(
+    model='vcl',
+    epochs=100,
+    batch_size=256,
+    learning_rate=1e-3,
+    coreset_size=30_000,
+    per_task_opt=True,
+    pretrain_epochs=0,
+    layer_init_logstd_mean=-14,
     layer_init_logstd_std=0.01,
   )
 
@@ -163,7 +175,7 @@ if __name__ == '__main__':
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
-  if not model and (sweep_id := None):
+  if not model and (sweep_id := 'sk5vragg'):
     wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
   if not model and (sweep_params := None):
     wandb.sweep(sweep_params, project='vcl', prior_runs=[])
