@@ -54,7 +54,6 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
   )
 }
 
-# TODO / new : 20i2m1v3
 sweep_dvcl_pmnist_coreset = sweep_discriminative | {
   'method': 'grid',
   'parameters': wrap_values(
@@ -64,19 +63,18 @@ sweep_dvcl_pmnist_coreset = sweep_discriminative | {
       'batch_size': 256,
       'epochs': 100,
       'learning_rate': 1e-3,
-      # 'coreset_size': [
-      #   200,
-      #   400,
-      #   1_000,
-      #   2_000,
-      #   2_500,
-      #   4_000,
-      #   5_000,
-      #   10_000,
-      #   25_000,
-      #   50_000,
-      # ],
-      'coreset_size': 25_000,
+      'coreset_size': [
+        200,
+        400,
+        1_000,
+        2_000,
+        2_500,
+        4_000,
+        5_000,
+        10_000,
+        25_000,
+        50_000,
+      ],
       'per_task_opt': True,
       'pretrain_epochs': 0,
       # {'min': -25.0, 'max': -3.0}
@@ -101,7 +99,6 @@ sweep_dsi_pmnist = sweep_discriminative | {
   )
 }
 
-# TODO
 sweep_dvcl_smnist = sweep_discriminative | {
   'method': 'grid',
   'parameters': wrap_values(
@@ -112,7 +109,7 @@ sweep_dvcl_smnist = sweep_discriminative | {
       'epochs': 120,
       'learning_rate': 1e-3,
       'coreset_size': 0,
-      'per_task_opt': [True, False],
+      'per_task_opt': True,
       'pretrain_epochs': 0,
       'layer_init_logstd_mean': list(map(float, np.arange(-32, 0.5, 0.5))),
       'layer_init_logstd_std': 0.1,
@@ -127,7 +124,7 @@ sweep_dsi_smnist = sweep_discriminative | {
       'model': 'si',
       'batch_size': [None, 256],
       'learning_rate': 1e-3,
-      'per_task_opt': [True, False],
+      'per_task_opt': True,
       'epochs': {'min': 20, 'max': 60},
       'c': {'min': 1e-4, 'max': 1.0},
       'xi': {'min': 5e-3, 'max': 0.5},
@@ -135,7 +132,6 @@ sweep_dsi_smnist = sweep_discriminative | {
   )
 }
 
-# TODO
 sweep_dvcl_nmnist = sweep_discriminative | {
   'method': 'grid',
   'parameters': wrap_values(
@@ -146,7 +142,7 @@ sweep_dvcl_nmnist = sweep_discriminative | {
       'epochs': 120,
       'learning_rate': 1e-3,
       'coreset_size': 0,
-      'per_task_opt': [True, False],
+      'per_task_opt': True,
       'pretrain_epochs': 0,
       'layer_init_logstd_mean': list(map(float, np.arange(-32, 0.5, 0.5))),
       'layer_init_logstd_std': 0.1,
