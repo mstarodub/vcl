@@ -177,7 +177,7 @@ if __name__ == '__main__':
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
-  if not model and (sweep_id := '20i2m1v3'):
+  if not model and (sweep_id := 'fygvgbr4'):
     wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
   if not model and (sweep_params := None):
     wandb.sweep(sweep_params, project='vcl', prior_runs=[])

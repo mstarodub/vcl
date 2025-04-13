@@ -54,8 +54,9 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
   )
 }
 
-# TODO
+# TODO / new : 20i2m1v3
 sweep_dvcl_pmnist_coreset = sweep_discriminative | {
+  'method': 'grid',
   'parameters': wrap_values(
     experiments.disc_pmnist
     | {
@@ -63,24 +64,26 @@ sweep_dvcl_pmnist_coreset = sweep_discriminative | {
       'batch_size': 256,
       'epochs': 100,
       'learning_rate': 1e-3,
-      'coreset_size': [
-        200,
-        400,
-        1_000,
-        2_000,
-        2_500,
-        4_000,
-        5_000,
-        10_000,
-        25_000,
-        50_000,
-      ],
+      # 'coreset_size': [
+      #   200,
+      #   400,
+      #   1_000,
+      #   2_000,
+      #   2_500,
+      #   4_000,
+      #   5_000,
+      #   10_000,
+      #   25_000,
+      #   50_000,
+      # ],
+      'coreset_size': 25_000,
       'per_task_opt': True,
       'pretrain_epochs': 0,
-      'layer_init_logstd_mean': {'min': -25.0, 'max': -3.0},
+      # {'min': -25.0, 'max': -3.0}
+      'layer_init_logstd_mean': list(map(float, np.arange(-24, -3.5, 2.0))),
       'layer_init_logstd_std': 0.01,
     }
-  )
+  ),
 }
 
 sweep_dsi_pmnist = sweep_discriminative | {
