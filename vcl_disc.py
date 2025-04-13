@@ -225,9 +225,9 @@ class Ddm(nn.Module):
         (data, target), t = batch_data, None
       data, target = data.to(device), target.to(device)
       self.zero_grad()
-      mean_pred = self(data, task=t, deterministic=True)
-      acc = accuracy(mean_pred, target)
-      loss = -self.sgvb_mc(mean_pred, target) + self.compute_kl() / len(loader.dataset)
+      pred = self(data, task=t)
+      acc = accuracy(pred, target)
+      loss = -self.sgvb_mc(pred, target) + self.compute_kl() / len(loader.dataset)
       loss.backward()
       opt.step()
       if batch % self.logging_every == 0 and data.shape[0] == self.batch_size:
