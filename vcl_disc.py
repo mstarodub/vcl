@@ -29,6 +29,7 @@ class Ddm(nn.Module):
     coreset_size=0,
     mle=None,
     multihead=False,
+    gaussian=False,
     logging_every=10,
   ):
     super().__init__()
@@ -38,6 +39,7 @@ class Ddm(nn.Module):
     self.per_task_opt = per_task_opt
     self.coreset_size = coreset_size
     self.multihead = multihead
+    self.gaussian = gaussian
 
     self.shared = nn.Sequential()
     self.shared.append(
@@ -125,8 +127,7 @@ class Ddm(nn.Module):
       return self.heads[0](x, deterministic=deterministic)
 
   # returns the first component of L_SGVB, without the N factor
-  @staticmethod
-  def sgvb_mc(pred, target):
+  def sgvb_mc(self, pred, target):
     # we classification task, so target is a index to the right class
     # apply softmax:
     # p(target | pred) = exp(pred_target) / sum_{i=0}^len(pred) exp(pred_i)
@@ -134,7 +135,10 @@ class Ddm(nn.Module):
     # and arrive at the l_n from https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html#torch.nn.CrossEntropyLoss
     # we use reduction=mean to get the 1/M factor and the outer sum,
     # and finally arrive at eq (3) without the N factor
-    return -F.cross_entropy(pred, target, reduction='mean')
+    if self.gaussian:
+      return -F.mse_loss(pred, target, reduction='mean')
+    else:
+      return -F.cross_entropy(pred, target, reduction='mean')
 
   def wandb_log(self, metrics):
     bli = 0
@@ -305,15 +309,21 @@ def discriminative_model_pipeline(params):
   loaders, baseline_loaders = None, None
   if params.problem == 'pmnist':
     baseline_loaders = dataloaders.pmnist_task_loaders(params.batch_size)[0]
-    loaders = dataloaders.pmnist_task_loaders(params.batch_size)
+    loaders = dataloaders.pmnist_task_loaders(
+      params.batch_size, regression=params.gaussian
+    )
   if params.problem == 'smnist':
     baseline_loaders = dataloaders.splitmnist_task_loaders(params.batch_size)[0]
-    loaders = dataloaders.splitmnist_task_loaders(params.batch_size)
+    loaders = dataloaders.splitmnist_task_loaders(
+      params.batch_size, regression=params.gaussian
+    )
   if params.problem == 'nmnist':
     baseline_loaders = dataloaders.notmnist_task_loaders(params.batch_size)[0]
-    loaders = dataloaders.notmnist_task_loaders(params.batch_size)
+    loaders = dataloaders.notmnist_task_loaders(
+      params.batch_size, regression=params.gaussian
+    )
 
-  if params.pretrain_epochs > 0:
+  if params.pretrain_epochs > 0 and not params.gaussian:
     mle = mle_disc.pretrain_mle(params, baseline_loaders[0][0], baseline_loaders[1][0])
 
   else:
@@ -333,6 +343,7 @@ def discriminative_model_pipeline(params):
     learning_rate=params.learning_rate,
     mle=mle,
     multihead=params.multihead,
+    gaussian=params.gaussian,
   ).to(torch_device())
 
   # we have lots of dynamic control flow. not sure about this

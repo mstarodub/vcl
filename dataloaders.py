@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import torchvision.datasets as datasets
 import torchvision.transforms.v2 as transforms
 from copy import copy
@@ -212,8 +213,9 @@ def nmnist_cont_task_loaders(batch_size):
   return loaders
 
 
-def pmnist_task_loaders(batch_size):
+def pmnist_task_loaders(batch_size, regression=False):
   mean_mnist, std_mnist = precomp_mnist_stats()
+  num_tasks = 10
 
   def transform_permute(idx):
     return transforms.Compose(
@@ -227,7 +229,12 @@ def pmnist_task_loaders(batch_size):
       ]
     )
 
-  num_tasks = 10
+  def transform_target(x):
+    x = torch.tensor(x)
+    if regression:
+      x = F.one_hot(x, num_tasks).float()
+    return x
+
   perms = [torch.randperm(28 * 28) for _ in range(num_tasks)]
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
   for task in range(num_tasks):
@@ -237,14 +244,14 @@ def pmnist_task_loaders(batch_size):
       train=True,
       download=True,
       transform=tf,
-      target_transform=torch.tensor,
+      target_transform=transform_target,
     )
     data_test = datasets.MNIST(
       './data',
       train=False,
       download=True,
       transform=tf,
-      target_transform=torch.tensor,
+      target_transform=transform_target,
     )
     cumulative_train_loaders.append(
       torch.utils.data.DataLoader(
@@ -276,17 +283,14 @@ def collate_add_task(task):
   return collate_fn
 
 
-# need to change the loss for this - extension
-def transform_onehot(class_a, class_b):
-  one_hot = {class_a: torch.tensor([1.0, 0.0]), class_b: torch.tensor([0.0, 1.0])}
-  return lambda x: one_hot[int(x)]
+def transform_label(class_a, class_b, onehot):
+  if onehot:
+    return lambda x: F.one_hot(torch.tensor(0 if x == class_a else 1), 2).float()
+  else:
+    return lambda x: torch.tensor(0 if x == class_a else 1)
 
 
-def transform_label(class_a, class_b):
-  return lambda x: torch.tensor(0 if x == class_a else 1)
-
-
-def splitmnist_task_loaders(batch_size):
+def splitmnist_task_loaders(batch_size, regression=False):
   mean_mnist, std_mnist = precomp_mnist_stats()
 
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
@@ -298,14 +302,14 @@ def splitmnist_task_loaders(batch_size):
       train=True,
       download=True,
       transform=transform(mean_mnist, std_mnist),
-      target_transform=transform_label(a, b),
+      target_transform=transform_label(a, b, regression),
     )
     test_ds = datasets.MNIST(
       './data',
       train=False,
       download=True,
       transform=transform(mean_mnist, std_mnist),
-      target_transform=transform_label(a, b),
+      target_transform=transform_label(a, b, regression),
     )
     # only include the two digits for this task
     train_mask = (train_ds.targets == a) | (train_ds.targets == b)
@@ -336,7 +340,7 @@ def splitmnist_task_loaders(batch_size):
   return loaders
 
 
-def notmnist_task_loaders(batch_size):
+def notmnist_task_loaders(batch_size, regression=False):
   mean_notmnist_small, std_notmnist_small = precomp_notmnist_stats()
 
   train_part = 0.8
@@ -368,9 +372,9 @@ def notmnist_task_loaders(batch_size):
 
     # shallow copy to un-share the target_transform, sharing the underlying data
     train_ds = copy(notmnist_data)
-    train_ds.target_transform = transform_label(a, b)
+    train_ds.target_transform = transform_label(a, b, regression)
     test_ds = copy(notmnist_data)
-    test_ds.target_transform = transform_label(a, b)
+    test_ds.target_transform = transform_label(a, b, regression)
 
     collate_fn = collate_add_task(task)
     cumulative_train_loaders.append(

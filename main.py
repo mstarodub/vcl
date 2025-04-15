@@ -47,6 +47,20 @@ if __name__ == '__main__':
     pretrain_epochs=0,
     layer_init_logstd_mean=-25,
     layer_init_logstd_std=0.01,
+    gaussian=False,
+  )
+
+  dvcl_pmnist_gaussian = experiments.disc_pmnist | dict(
+    model='vcl',
+    epochs=100,
+    batch_size=256,
+    learning_rate=1e-3,
+    coreset_size=0,
+    per_task_opt=False,
+    pretrain_epochs=0,
+    layer_init_logstd_mean=-40,
+    layer_init_logstd_std=0.01,
+    gaussian=True,
   )
 
   dvcl_pmnist_coreset = experiments.disc_pmnist | dict(
@@ -59,6 +73,7 @@ if __name__ == '__main__':
     pretrain_epochs=0,
     layer_init_logstd_mean=-16,
     layer_init_logstd_std=0.01,
+    gaussian=False,
   )
 
   dvcl_smnist = experiments.disc_smnist | dict(
@@ -71,6 +86,7 @@ if __name__ == '__main__':
     per_task_opt=True,
     layer_init_logstd_mean=-4,
     layer_init_logstd_std=0.01,
+    gaussian=False,
   )
 
   dvcl_nmnist = experiments.disc_nmnist | dict(
@@ -83,6 +99,7 @@ if __name__ == '__main__':
     per_task_opt=True,
     layer_init_logstd_mean=-3.5,
     layer_init_logstd_std=0.01,
+    gaussian=False,
   )
 
   dsi_pmnist = experiments.disc_pmnist | dict(
@@ -155,6 +172,7 @@ if __name__ == '__main__':
   # discriminative
   # vcl
   # model = model_pipeline(dvcl_pmnist, wandb_log=True)
+  model = model_pipeline(dvcl_pmnist_gaussian, wandb_log=True)
   # model = model_pipeline(dvcl_pmnist_coreset, wandb_log=True)
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_nmnist, wandb_log=True)
