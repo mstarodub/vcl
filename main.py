@@ -56,9 +56,9 @@ if __name__ == '__main__':
     batch_size=256,
     learning_rate=1e-3,
     coreset_size=0,
-    per_task_opt=False,
+    per_task_opt=True,
     pretrain_epochs=0,
-    layer_init_logstd_mean=-40,
+    layer_init_logstd_mean=-26.25,
     layer_init_logstd_std=0.01,
     gaussian=True,
   )
@@ -193,7 +193,10 @@ if __name__ == '__main__':
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
   # so just run this inside __main__
-  if not model and (sweep_id := None):
+  sweep_id = ''
+  if not model and sweep_id:
     wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
-  if not model and (sweep_params := None):
+
+  sweep_params = hyperparam_search.sweep_dvcl_pmnist_gaussian
+  if not model and not sweep_id and sweep_params:
     wandb.sweep(sweep_params, project='vcl', prior_runs=[])

@@ -278,3 +278,23 @@ sweep_gsi_nmnist = sweep_generative | {
     }
   ),
 }
+
+sweep_dvcl_pmnist_gaussian = sweep_discriminative | {
+  'method': 'grid',
+  'parameters': wrap_values(
+    experiments.disc_pmnist
+    | {
+      'model': 'vcl',
+      'batch_size': 256,
+      'epochs': 100,
+      'learning_rate': 1e-3,
+      'coreset_size': 0,
+      'per_task_opt': True,
+      'pretrain_epochs': 0,
+      # list(map(float, np.arange(-40, 0.5, 0.5))),
+      'layer_init_logstd_mean': list(map(float, np.arange(-28.5, -26, 0.25))),
+      'layer_init_logstd_std': 0.01,
+      'gaussian': True,
+    }
+  ),
+}

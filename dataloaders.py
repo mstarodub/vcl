@@ -216,6 +216,7 @@ def nmnist_cont_task_loaders(batch_size):
 def pmnist_task_loaders(batch_size, regression=False):
   mean_mnist, std_mnist = precomp_mnist_stats()
   num_tasks = 10
+  num_classes = 10
 
   def transform_permute(idx):
     return transforms.Compose(
@@ -232,7 +233,7 @@ def pmnist_task_loaders(batch_size, regression=False):
   def transform_target(x):
     x = torch.tensor(x)
     if regression:
-      x = F.one_hot(x, num_tasks).float()
+      x = F.one_hot(x, num_classes).float()
     return x
 
   perms = [torch.randperm(28 * 28) for _ in range(num_tasks)]

@@ -286,9 +286,9 @@ class Ddm(nn.Module):
   def test_run(self, loaders, task):
     self.eval()
     device = torch_device()
-    avg_accuracies = []
+    avg_accuracies, avg_rmses = [], []
     for test_task, loader in tqdm(enumerate(loaders), desc=f'task {task} phase t'):
-      task_accuracies = []
+      task_accuracies, task_rmses = [], []
       for batch, batch_data in enumerate(loader):
         if self.multihead:
           data, target, t = batch_data
@@ -299,10 +299,22 @@ class Ddm(nn.Module):
         mean_pred = self(data, task=t, deterministic=True)
         acc = accuracy(mean_pred, target)
         task_accuracies.append(acc.item())
+        rmse = (
+          torch.sqrt(F.mse_loss(mean_pred, target) + 1e-10)
+          if self.gaussian
+          else torch.tensor(0)
+        )
+        task_rmses.append(rmse)
       task_accuracy = np.mean(task_accuracies)
-      wandb.log({'task': task, f'test/test_acc_task_{test_task}': task_accuracy})
+      task_rmse = np.mean(task_rmses)
       avg_accuracies.append(task_accuracy)
+      avg_rmses.append(task_rmse)
+      wandb.log({'task': task, f'test/test_acc_task_{test_task}': task_accuracy})
+      if self.gaussian:
+        wandb.log({'task': task, f'test/test_rmse_task_{test_task}': task_rmse})
     wandb.log({'task': task, 'test/test_acc': np.mean(avg_accuracies)})
+    if self.gaussian:
+      wandb.log({'task': task, 'test/test_rmse': np.mean(avg_rmses)})
 
 
 def discriminative_model_pipeline(params):
@@ -323,7 +335,7 @@ def discriminative_model_pipeline(params):
       params.batch_size, regression=params.gaussian
     )
 
-  if params.pretrain_epochs > 0 and not params.gaussian:
+  if params.pretrain_epochs > 0:
     mle = mle_disc.pretrain_mle(params, baseline_loaders[0][0], baseline_loaders[1][0])
 
   else:
