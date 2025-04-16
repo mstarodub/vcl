@@ -6,6 +6,19 @@ import os
 
 import experiments
 
+# TODO
+# 1. plot:
+# - total pmnist: vcl + si + vcl 25k coreset
+# - total smnist: vcl + si
+# - total nmnist: vcl + si
+# 2. plot:
+# - total pmnist: vcl + vcl regression homo + vcl regression hetero (acc + rmse dual axis)
+# 3. plot:
+# - pmnist per task acc: vcl regression homo + vcl regression hetero (acc + rmse dual axis)
+# vcl reg homo:
+# z1tu65iy
+# vcl reg hetero:
+# TODO
 
 # disc_pmnist
 if False:
