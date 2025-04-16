@@ -218,6 +218,8 @@ if __name__ == '__main__':
   if not model and sweep_id:
     wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
 
-  sweep_params = hyperparam_search.sweep_dvcl_pmnist_gaussian_hetero
+  sweep_params = None
   if not model and not sweep_id and sweep_params:
     wandb.sweep(sweep_params, project='vcl', prior_runs=[])
+
+  print('specify/uncomment model')
