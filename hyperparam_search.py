@@ -50,6 +50,8 @@ sweep_dvcl_pmnist_nocoreset = sweep_discriminative | {
       'layer_init_logstd_mean': {'min': -26.0, 'max': -1.0},
       # [1e-1, 1e-2, 1e-3, 1e-5]
       'layer_init_logstd_std': 0.01,
+      'gaussian': False,
+      'heteroscedastic': False,
     }
   )
 }
@@ -80,6 +82,8 @@ sweep_dvcl_pmnist_coreset = sweep_discriminative | {
       # {'min': -25.0, 'max': -3.0}
       'layer_init_logstd_mean': list(map(float, np.arange(-24, -3.5, 2.0))),
       'layer_init_logstd_std': 0.01,
+      'gaussian': False,
+      'heteroscedastic': False,
     }
   ),
 }
@@ -113,6 +117,8 @@ sweep_dvcl_smnist = sweep_discriminative | {
       'pretrain_epochs': 0,
       'layer_init_logstd_mean': list(map(float, np.arange(-32, 0.5, 0.5))),
       'layer_init_logstd_std': 0.1,
+      'gaussian': False,
+      'heteroscedastic': False,
     }
   ),
 }
@@ -146,6 +152,8 @@ sweep_dvcl_nmnist = sweep_discriminative | {
       'pretrain_epochs': 0,
       'layer_init_logstd_mean': list(map(float, np.arange(-32, 0.5, 0.5))),
       'layer_init_logstd_std': 0.1,
+      'gaussian': False,
+      'heteroscedastic': False,
     }
   ),
 }
@@ -295,6 +303,28 @@ sweep_dvcl_pmnist_gaussian = sweep_discriminative | {
       'layer_init_logstd_mean': list(map(float, np.arange(-28.5, -26, 0.25))),
       'layer_init_logstd_std': 0.01,
       'gaussian': True,
+      'heteroscedastic': False,
+    }
+  ),
+}
+
+sweep_dvcl_pmnist_gaussian_hetero = sweep_discriminative | {
+  'method': 'grid',
+  'parameters': wrap_values(
+    experiments.disc_pmnist
+    | {
+      'model': 'vcl',
+      'batch_size': 256,
+      'epochs': 100,
+      'learning_rate': 1e-3,
+      'coreset_size': 0,
+      'per_task_opt': True,
+      'pretrain_epochs': 0,
+      # list(map(float, np.arange(-40, -1, 2))),
+      'layer_init_logstd_mean': list(map(float, np.arange(-29.5, -22, 0.5))),
+      'layer_init_logstd_std': 0.01,
+      'gaussian': True,
+      'heteroscedastic': True,
     }
   ),
 }

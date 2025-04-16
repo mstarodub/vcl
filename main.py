@@ -73,6 +73,7 @@ if __name__ == '__main__':
     coreset_size=0,
     per_task_opt=True,
     pretrain_epochs=0,
+    # not tuned. weird optimization dynamics, like during dsi (?)
     layer_init_logstd_mean=-26.25,
     layer_init_logstd_std=0.01,
     gaussian=True,
@@ -217,6 +218,6 @@ if __name__ == '__main__':
   if not model and sweep_id:
     wandb.agent(sweep_id, model_pipeline, project='vcl', count=15)
 
-  sweep_params = hyperparam_search.sweep_dvcl_pmnist_gaussian
+  sweep_params = hyperparam_search.sweep_dvcl_pmnist_gaussian_hetero
   if not model and not sweep_id and sweep_params:
     wandb.sweep(sweep_params, project='vcl', prior_runs=[])
