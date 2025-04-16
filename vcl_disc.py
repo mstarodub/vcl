@@ -30,6 +30,7 @@ class Ddm(nn.Module):
     mle=None,
     multihead=False,
     gaussian=False,
+    heteroscedastic=False,
     logging_every=10,
   ):
     super().__init__()
@@ -39,7 +40,9 @@ class Ddm(nn.Module):
     self.per_task_opt = per_task_opt
     self.coreset_size = coreset_size
     self.multihead = multihead
+    self.target_out_dim = out_dim
     self.gaussian = gaussian
+    self.heteroscedastic = heteroscedastic
 
     self.shared = nn.Sequential()
     self.shared.append(
@@ -55,16 +58,17 @@ class Ddm(nn.Module):
       self.shared.append(nn.ReLU())
     self.shared.forward = self.shared_forward
 
+    head_out_features = 2 * out_dim if self.heteroscedastic else out_dim
     self.heads = nn.ModuleList(
       [
         BayesianLinear(
-          hidden_dim, out_dim, layer_init_logstd_mean, layer_init_logstd_std
+          hidden_dim, head_out_features, layer_init_logstd_mean, layer_init_logstd_std
         )
         for _ in range(ntasks if self.multihead else 1)
       ]
     )
 
-    if mle:
+    if mle and not self.gaussian:
       self.init_from_mle(mle)
 
   def shared_forward(self, x, deterministic=False):
@@ -109,8 +113,6 @@ class Ddm(nn.Module):
 
   def compute_kl(self):
     # notice that the gradients of the unused heads are zeroed and hence the KL terms are zero too
-    # TODO: test self.bayesian_layers performance for multi-head case
-    #   same for vcl_gen
     return sum(layer.kl_layer() for layer in self.shared_bayesian_layers)
 
   def forward(self, x, task=None, deterministic=False):
@@ -136,7 +138,16 @@ class Ddm(nn.Module):
     # we use reduction=mean to get the 1/M factor and the outer sum,
     # and finally arrive at eq (3) without the N factor
     if self.gaussian:
-      return -F.mse_loss(pred, target, reduction='mean')
+      if self.heteroscedastic:
+        mean = pred[:, : self.target_out_dim]
+        log_var = pred[:, self.target_out_dim :]
+        # we need to clamp this here, otherwise exp(log_var) becomes NaN
+        # (overflows?) after the transition to task 1
+        log_var = torch.clamp(log_var, min=-10.0, max=10.0)
+        sq_err = (target - mean) ** 2
+        return -(log_var + sq_err / log_var.exp()).mean()
+      else:
+        return -F.mse_loss(pred, target, reduction='mean')
     else:
       return -F.cross_entropy(pred, target, reduction='mean')
 
@@ -230,17 +241,21 @@ class Ddm(nn.Module):
       data, target = data.to(device), target.to(device)
       self.zero_grad()
       pred = self(data, task=t)
-      acc = accuracy(pred, target)
       loss = -self.sgvb_mc(pred, target) + self.compute_kl() / len(loader.dataset)
       loss.backward()
       opt.step()
+      if self.heteroscedastic:
+        mean_pred = pred[:, : self.target_out_dim]
+        avg_std_pred = (0.5 * pred[:, self.target_out_dim :]).exp().mean()
+        pred = mean_pred
+      acc = accuracy(pred, target)
       if batch % self.logging_every == 0 and data.shape[0] == self.batch_size:
         metrics = {
           'task': task,
           'epoch': epoch,
           'train/train_loss': loss,
           'train/train_acc': acc,
-        }
+        } | ({'train/train_pred_avg_std': avg_std_pred} if self.heteroscedastic else {})
         self.wandb_log(metrics)
 
   def train_test_run(self, tasks, num_epochs):
@@ -297,6 +312,11 @@ class Ddm(nn.Module):
           (data, target), t = batch_data, None
         data, target = data.to(device), target.to(device)
         mean_pred = self(data, task=t, deterministic=True)
+        if self.heteroscedastic:
+          mean_mean_pred = mean_pred[:, : self.target_out_dim]
+          # we could log this maybe
+          _avg_std_mean_pred = (0.5 * mean_pred[:, self.target_out_dim :]).exp().mean()
+          mean_pred = mean_mean_pred
         acc = accuracy(mean_pred, target)
         task_accuracies.append(acc.item())
         rmse = (
@@ -318,6 +338,8 @@ class Ddm(nn.Module):
 
 
 def discriminative_model_pipeline(params):
+  torch.autograd.set_detect_anomaly(True)
+
   loaders, baseline_loaders = None, None
   if params.problem == 'pmnist':
     baseline_loaders = dataloaders.pmnist_task_loaders(params.batch_size)[0]
@@ -356,6 +378,7 @@ def discriminative_model_pipeline(params):
     mle=mle,
     multihead=params.multihead,
     gaussian=params.gaussian,
+    heteroscedastic=params.heteroscedastic,
   ).to(torch_device())
 
   # we have lots of dynamic control flow. not sure about this
