@@ -192,7 +192,7 @@ if __name__ == '__main__':
   # discriminative
   # vcl
   # model = model_pipeline(dvcl_pmnist, wandb_log=True)
-  # model = model_pipeline(dvcl_pmnist_gaussian_homo, wandb_log=True)
+  model = model_pipeline(dvcl_pmnist_gaussian_homo, wandb_log=True)
   # model = model_pipeline(dvcl_pmnist_gaussian_hetero, wandb_log=True)
   # model = model_pipeline(dvcl_pmnist_coreset, wandb_log=True)
   # model = model_pipeline(dvcl_smnist, wandb_log=True)

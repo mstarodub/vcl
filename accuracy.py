@@ -127,3 +127,10 @@ def accuracy(pred, target):
   # undo one-hot encoding, if applicable
   target_idx = target.argmax(dim=1) if target.ndim == pred.ndim else target
   return (pred.argmax(dim=1) == target_idx).float().mean()
+
+
+def root_ms_error(pred, target):
+  if pred.shape == target.shape:
+    return torch.sqrt(F.mse_loss(pred, target) + 1e-10)
+  else:
+    return torch.tensor(0)

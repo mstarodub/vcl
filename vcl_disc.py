@@ -8,7 +8,7 @@ from typing import Optional, List, Set, Any
 
 import mle_disc
 import dataloaders
-from accuracy import accuracy
+import accuracy
 from util import torch_device
 from bayesian_layer import BayesianLinear
 
@@ -248,14 +248,19 @@ class Ddm(nn.Module):
         mean_pred = pred[:, : self.target_out_dim]
         avg_std_pred = (0.5 * pred[:, self.target_out_dim :]).exp().mean()
         pred = mean_pred
-      acc = accuracy(pred, target)
+      acc = accuracy.accuracy(pred, target)
+      rmse = accuracy.root_ms_error(pred, target)
       if batch % self.logging_every == 0 and data.shape[0] == self.batch_size:
-        metrics = {
-          'task': task,
-          'epoch': epoch,
-          'train/train_loss': loss,
-          'train/train_acc': acc,
-        } | ({'train/train_pred_avg_std': avg_std_pred} if self.heteroscedastic else {})
+        metrics = (
+          {
+            'task': task,
+            'epoch': epoch,
+            'train/train_loss': loss,
+            'train/train_acc': acc,
+          }
+          | ({'train/train_pred_avg_std': avg_std_pred} if self.heteroscedastic else {})
+          | ({'train/rmse': rmse} if self.gaussian else {})
+        )
         self.wandb_log(metrics)
 
   def train_test_run(self, tasks, num_epochs):
@@ -317,13 +322,9 @@ class Ddm(nn.Module):
           # we could log this maybe
           _avg_std_mean_pred = (0.5 * mean_pred[:, self.target_out_dim :]).exp().mean()
           mean_pred = mean_mean_pred
-        acc = accuracy(mean_pred, target)
+        acc = accuracy.accuracy(mean_pred, target)
         task_accuracies.append(acc.item())
-        rmse = (
-          torch.sqrt(F.mse_loss(mean_pred, target) + 1e-10)
-          if self.gaussian
-          else torch.tensor(0)
-        )
+        rmse = accuracy.root_ms_error(mean_pred, target)
         task_rmses.append(rmse)
       task_accuracy = np.mean(task_accuracies)
       task_rmse = np.mean(task_rmses)
