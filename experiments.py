@@ -20,6 +20,17 @@ disc_smnist = dict(
   experiment='discriminative',
 )
 
+disc_singlehead_smnist = dict(
+  in_dim=28 * 28,
+  hidden_dim=256,
+  out_dim=10,
+  hidden_layers=2,
+  ntasks=5,
+  multihead=False,
+  problem='smnist-singlehead',
+  experiment='discriminative',
+)
+
 disc_nmnist = dict(
   in_dim=28 * 28,
   hidden_dim=150,

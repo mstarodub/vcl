@@ -142,6 +142,20 @@ def plot_disc_nmnist_per_task_acc(api, with_baseline):
   plot_per_task(api, run_ids, metrics, 'test accuracy', fname, y_dtick=y_dtick)
 
 
+def plot_singlehead_smnist_total_acc(api):
+  exp_run_ids = {
+    'single-head split MNIST': {
+      '6o5px45z': 'vcl',
+      'n9gb6ai8': 'vcl + coreset (1k)',
+      'r85uocra': 'si',
+    }
+  }
+  metrics = ['test/test_acc']
+  metric_name = 'test accuracy (total)'
+  fname = 'total_acc_disc_singlehead_smnist'
+  plot_total_comparison(api, exp_run_ids, metrics, metric_name, fname, 0.1)
+
+
 def plot_gen_mnist(api, metric_type, with_baseline):
   if with_baseline and metric_type == 'll':
     run_ids = {
@@ -216,7 +230,7 @@ def plot_gen_nmnist(api, metric_type, with_baseline):
   plot_per_task(api, run_ids, metrics, metric_name, fname, y_dtick=None)
 
 
-def plot_total_acc_pmnist_smnist_nmnist(api):
+def plot_pmnist_smnist_nmnist_total_acc(api):
   exp_run_ids = {
     'permuted MNIST': {
       '8nk4zrmw': 'si',
@@ -235,10 +249,10 @@ def plot_total_acc_pmnist_smnist_nmnist(api):
   metrics = ['test/test_acc']
   metric_name = 'test accuracy (total)'
   fname = 'total_acc_pmnist_smnist_nmnist'
-  plot_total_comparison(api, exp_run_ids, metrics, metric_name, fname)
+  plot_total_comparison(api, exp_run_ids, metrics, metric_name, fname, 0.02)
 
 
-def plot_total_comparison(api, exp_run_ids, metrics, metric_name, fname):
+def plot_total_comparison(api, exp_run_ids, metrics, metric_name, fname, y_dtick):
   path = f'figures/data_raw/{fname}.csv'
   if os.path.exists(path):
     df_all = pl.read_csv(path)
@@ -255,7 +269,7 @@ def plot_total_comparison(api, exp_run_ids, metrics, metric_name, fname):
   fig = make_subplots(
     rows=1,
     cols=len(exp_run_ids),
-    subplot_titles=exp_run_ids.keys(),
+    subplot_titles=list(exp_run_ids.keys()),
     x_title='task step',
     y_title=metric_name,
   )
@@ -270,7 +284,7 @@ def plot_total_comparison(api, exp_run_ids, metrics, metric_name, fname):
     fig.update_traces(mode='lines+markers', row=1, col=idx + 1)
 
   fig.update_xaxes(dtick=1)
-  fig.update_yaxes(dtick=0.02)
+  fig.update_yaxes(dtick=y_dtick)
 
   fig.write_image(
     f'figures/{fname}.png', width=400 * len(exp_run_ids), height=400, scale=2
@@ -370,9 +384,10 @@ if __name__ == '__main__':
   # plot_gen_nmnist(api, 'uncert', with_baseline=True)
   # plot_gen_nmnist(api, 'll', with_baseline=False)
   # plot_gen_nmnist(api, 'll', with_baseline=True)
-  # plot_total_acc_pmnist_smnist_nmnist(api)
+  # plot_pmnist_smnist_nmnist_total_acc(api)
   # plot_pmnist_vcl_regression_total_acc_rmse(api)
   # plot_pmnist_vcl_regression_per_task(api, 'acc', 'homo')
   # plot_pmnist_vcl_regression_per_task(api, 'rmse', 'homo')
   # plot_pmnist_vcl_regression_per_task(api, 'acc', 'hetero')
   # plot_pmnist_vcl_regression_per_task(api, 'rmse', 'hetero')
+  plot_singlehead_smnist_total_acc(api)

@@ -1,0 +1,16 @@
+task,test/test_acc,experiment,experiment_group
+0.0,0.9990543723106384,vcl,single-head split MNIST
+1.0,0.7598188519477844,vcl,single-head split MNIST
+2.0,0.42962247629960376,vcl,single-head split MNIST
+3.0,0.2672979130875319,vcl,single-head split MNIST
+4.0,0.20674745810683817,vcl,single-head split MNIST
+0.0,0.9990543723106384,vcl + coreset (1k),single-head split MNIST
+1.0,0.9704738259315491,vcl + coreset (1k),single-head split MNIST
+2.0,0.9406963785489401,vcl + coreset (1k),single-head split MNIST
+3.0,0.9204205721616745,vcl + coreset (1k),single-head split MNIST
+4.0,0.8854802846908569,vcl + coreset (1k),single-head split MNIST
+0.0,0.9995659722222222,si,single-head split MNIST
+1.0,0.497802734375,si,single-head split MNIST
+2.0,0.33545312500791624,si,single-head split MNIST
+3.0,0.26124034292944187,si,single-head split MNIST
+4.0,0.20245312498882412,si,single-head split MNIST

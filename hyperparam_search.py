@@ -328,3 +328,23 @@ sweep_dvcl_pmnist_gaussian_hetero = sweep_discriminative | {
     }
   ),
 }
+
+sweep_dvcl_singlehead_smnist = sweep_discriminative | {
+  'method': 'grid',
+  'parameters': wrap_values(
+    experiments.disc_singlehead_smnist
+    | {
+      'model': 'vcl',
+      'batch_size': None,
+      'epochs': 120,
+      'learning_rate': 1e-3,
+      'coreset_size': 0,
+      'per_task_opt': True,
+      'pretrain_epochs': 0,
+      'layer_init_logstd_mean': list(map(float, np.arange(-7.75, -5, 0.25))),
+      'layer_init_logstd_std': 0.01,
+      'gaussian': False,
+      'heteroscedastic': False,
+    }
+  ),
+}

@@ -347,10 +347,15 @@ def discriminative_model_pipeline(params):
     loaders = dataloaders.pmnist_task_loaders(
       params.batch_size, regression=params.gaussian
     )
-  if params.problem == 'smnist':
+  if params.problem == 'smnist' or params.problem == 'smnist-singlehead':
+    # warning: mle init incomplete for singlehead split mnist
+    # gaussian also untested for singlehead split mnist
+    # TODO: implement gaussian likelihood for SI
     baseline_loaders = dataloaders.splitmnist_task_loaders(params.batch_size)[0]
     loaders = dataloaders.splitmnist_task_loaders(
-      params.batch_size, regression=params.gaussian
+      params.batch_size,
+      regression=params.gaussian,
+      multihead=params.multihead,
     )
   if params.problem == 'nmnist':
     baseline_loaders = dataloaders.notmnist_task_loaders(params.batch_size)[0]

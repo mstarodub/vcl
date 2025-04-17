@@ -284,14 +284,20 @@ def collate_add_task(task):
   return collate_fn
 
 
-def transform_label(class_a, class_b, onehot):
+def transform_label(class_a, class_b, onehot, multihead=True):
   if onehot:
-    return lambda x: F.one_hot(torch.tensor(0 if x == class_a else 1), 2).float()
+    if multihead:
+      return lambda x: F.one_hot(torch.tensor(0 if x == class_a else 1), 2).float()
+    else:
+      return lambda x: F.one_hot(torch.tensor(x), 10).float()
   else:
-    return lambda x: torch.tensor(0 if x == class_a else 1)
+    if multihead:
+      return lambda x: torch.tensor(0 if x == class_a else 1)
+    else:
+      return lambda x: torch.tensor(x)
 
 
-def splitmnist_task_loaders(batch_size, regression=False):
+def splitmnist_task_loaders(batch_size, regression=False, multihead=True):
   mean_mnist, std_mnist = precomp_mnist_stats()
 
   loaders, cumulative_train_loaders, cumulative_test_loaders = [], [], []
@@ -303,21 +309,21 @@ def splitmnist_task_loaders(batch_size, regression=False):
       train=True,
       download=True,
       transform=transform(mean_mnist, std_mnist),
-      target_transform=transform_label(a, b, regression),
+      target_transform=transform_label(a, b, regression, multihead=multihead),
     )
     test_ds = datasets.MNIST(
       './data',
       train=False,
       download=True,
       transform=transform(mean_mnist, std_mnist),
-      target_transform=transform_label(a, b, regression),
+      target_transform=transform_label(a, b, regression, multihead=multihead),
     )
     # only include the two digits for this task
     train_mask = (train_ds.targets == a) | (train_ds.targets == b)
     test_mask = (test_ds.targets == a) | (test_ds.targets == b)
     train_idx = torch.nonzero(train_mask).squeeze()
     test_idx = torch.nonzero(test_mask).squeeze()
-    collate_fn = collate_add_task(task)
+    collate_fn = collate_add_task(task) if multihead else None
     cumulative_train_loaders.append(
       torch.utils.data.DataLoader(
         torch.utils.data.Subset(train_ds, train_idx),

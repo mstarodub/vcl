@@ -2,7 +2,7 @@ import wandb
 
 import util
 import experiments
-import hyperparam_search
+import hyperparam_search as hs
 from vae_gen import baseline_generative_model
 from vcl_disc import discriminative_model_pipeline as vcl_discriminative_model_pipeline
 from vcl_gen import generative_model_pipeline as vcl_generative_model_pipeline
@@ -34,6 +34,18 @@ if __name__ == '__main__':
   wandb.login()
   util.torch_version()
   util.seed(0)
+
+  # not tuned
+
+  dsi_singlehead_smnist = experiments.disc_singlehead_smnist | dict(
+    model='si',
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.99,
+    xi=0.04,
+    per_task_opt=True,
+  )
 
   # best params
 
@@ -78,6 +90,34 @@ if __name__ == '__main__':
     layer_init_logstd_std=0.01,
     gaussian=True,
     heteroscedastic=True,
+  )
+
+  dvcl_singlehead_smnist = experiments.disc_singlehead_smnist | dict(
+    model='vcl',
+    epochs=120,
+    batch_size=None,
+    learning_rate=1e-3,
+    pretrain_epochs=0,
+    coreset_size=0,
+    per_task_opt=True,
+    layer_init_logstd_mean=-4,
+    layer_init_logstd_std=0.01,
+    gaussian=False,
+    heteroscedastic=False,
+  )
+
+  dvcl_singlehead_smnist_coreset = experiments.disc_singlehead_smnist | dict(
+    model='vcl',
+    epochs=120,
+    batch_size=None,
+    learning_rate=1e-3,
+    pretrain_epochs=0,
+    coreset_size=1000,
+    per_task_opt=True,
+    layer_init_logstd_mean=-4,
+    layer_init_logstd_std=0.01,
+    gaussian=False,
+    heteroscedastic=False,
   )
 
   dvcl_pmnist_coreset = experiments.disc_pmnist | dict(
@@ -192,7 +232,7 @@ if __name__ == '__main__':
   # discriminative
   # vcl
   # model = model_pipeline(dvcl_pmnist, wandb_log=True)
-  model = model_pipeline(dvcl_pmnist_gaussian_homo, wandb_log=True)
+  # model = model_pipeline(dvcl_pmnist_gaussian_homo, wandb_log=True)
   # model = model_pipeline(dvcl_pmnist_gaussian_hetero, wandb_log=True)
   # model = model_pipeline(dvcl_pmnist_coreset, wandb_log=True)
   # model = model_pipeline(dvcl_smnist, wandb_log=True)
@@ -210,6 +250,10 @@ if __name__ == '__main__':
   # si
   # model = model_pipeline(gsi_mnist, wandb_log=True)
   # model = model_pipeline(gsi_nmnist, wandb_log=True)
+  # single-head split mnist
+  # model = model_pipeline(dvcl_singlehead_smnist, wandb_log=True)
+  # model = model_pipeline(dvcl_singlehead_smnist_coreset, wandb_log=True)
+  # model = model_pipeline(dsi_singlehead_smnist, wandb_log=True)
 
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953
@@ -221,5 +265,3 @@ if __name__ == '__main__':
   sweep_params = None
   if not model and not sweep_id and sweep_params:
     wandb.sweep(sweep_params, project='vcl', prior_runs=[])
-
-  print('specify/uncomment model')

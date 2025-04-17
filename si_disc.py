@@ -143,8 +143,11 @@ def discriminative_model_pipeline(params):
   loaders = None
   if params.problem == 'pmnist':
     loaders = dataloaders.pmnist_task_loaders(params.batch_size)
-  if params.problem == 'smnist':
-    loaders = dataloaders.splitmnist_task_loaders(params.batch_size)
+  if params.problem == 'smnist' or params.problem == 'smnist-singlehead':
+    loaders = dataloaders.splitmnist_task_loaders(
+      params.batch_size,
+      multihead=params.multihead,
+    )
   if params.problem == 'nmnist':
     loaders = dataloaders.notmnist_task_loaders(params.batch_size)
 
