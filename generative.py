@@ -18,6 +18,7 @@ class Generative(nn.Module):
     latent_dim,
     architecture,
     ntasks,
+    multihead,
     batch_size,
     learning_rate,
     classifier,
@@ -26,12 +27,15 @@ class Generative(nn.Module):
     super().__init__()
     self.latent_dim = latent_dim
     self.ntasks = ntasks
+    self.multihead = multihead
     self.batch_size = batch_size
     self.learning_rate = learning_rate
     self.classifier = classifier
     self.logging_every = logging_every
     self.architecture = architecture
 
+    # in the singlehead case, we keep the task-specific encoder for now
+    # requires a CVAE otherwise (?)
     self.encoders = nn.ModuleList(
       nn.Sequential(
         nn.Linear(in_dim, hidden_dim),
@@ -76,24 +80,28 @@ class Generative(nn.Module):
     z = mu + torch.exp(log_sigma) * eps
     return z, mu, log_sigma
 
+  # the task is only getting used in the multihead case
   def decode(self, z, task):
     curr_batch_size, x_prime = z.shape[0], None
 
-    def heads(inp):
-      out = torch.zeros(
-        curr_batch_size,
-        self.dec_heads_l2[1],
-        device=z.device,
-        dtype=z.dtype,
-      )
-      for head_idx, head in enumerate(self.decoder_heads):
-        mask = task == head_idx
-        out += head(inp) * mask.unsqueeze(1)
-      return out
+    def head_s(inp):
+      if self.multihead:
+        out = torch.zeros(
+          curr_batch_size,
+          self.dec_heads_l2[1],
+          device=z.device,
+          dtype=z.dtype,
+        )
+        for head_idx, head in enumerate(self.decoder_heads):
+          mask = task == head_idx
+          out += head(inp) * mask.unsqueeze(1)
+        return out
+      else:
+        return self.decoder_heads[0](inp)
 
     if self.architecture == 1:
-      # heads
-      h = heads(z)
+      # head(s)
+      h = head_s(z)
       h = F.relu(h)
       # followed by shared
       x_prime = self.decoder_shared(h)
@@ -101,8 +109,8 @@ class Generative(nn.Module):
       # shared
       h = self.decoder_shared(z)
       h = F.relu(h)
-      # followed by heads
-      x_prime = heads(h)
+      # followed by head(s)
+      x_prime = head_s(h)
     return F.sigmoid(x_prime)
 
   @torch.no_grad()

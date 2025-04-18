@@ -47,6 +47,7 @@ gen_mnist = dict(
   hidden_dim=500,
   latent_dim=50,
   ntasks=10,
+  mulihead=True,
   architecture=1,
   problem='mnist',
   experiment='generative',
@@ -57,7 +58,19 @@ gen_nmnist = dict(
   hidden_dim=500,
   latent_dim=50,
   ntasks=10,
+  mulihead=True,
   architecture=1,
   problem='nmnist',
+  experiment='generative',
+)
+
+gen_singlehead_mnist = dict(
+  in_dim=28 * 28,
+  hidden_dim=500,
+  latent_dim=50,
+  ntasks=10,
+  multihead=False,
+  architecture=1,
+  problem='mnist',
   experiment='generative',
 )

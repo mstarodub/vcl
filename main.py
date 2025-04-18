@@ -35,18 +35,6 @@ if __name__ == '__main__':
   util.torch_version()
   util.seed(0)
 
-  # not tuned
-
-  dsi_singlehead_smnist = experiments.disc_singlehead_smnist | dict(
-    model='si',
-    epochs=20,
-    batch_size=256,
-    learning_rate=1e-3,
-    c=0.99,
-    xi=0.04,
-    per_task_opt=True,
-  )
-
   # best params
 
   dvcl_pmnist = experiments.disc_pmnist | dict(
@@ -228,6 +216,27 @@ if __name__ == '__main__':
     xi=0.00001,
   )
 
+  # not tuned
+
+  dsi_singlehead_smnist = experiments.disc_singlehead_smnist | dict(
+    model='si',
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    c=0.99,
+    xi=0.04,
+    per_task_opt=True,
+  )
+
+  gvcl_singlehead_mnist = experiments.gen_singlehead_mnist | dict(
+    model='vcl',
+    epochs=20,
+    batch_size=256,
+    learning_rate=1e-3,
+    layer_init_logstd_mean=-5,
+    layer_init_logstd_std=0.1,
+  )
+
   model = None
   # discriminative
   # vcl
@@ -254,6 +263,8 @@ if __name__ == '__main__':
   # model = model_pipeline(dvcl_singlehead_smnist, wandb_log=True)
   # model = model_pipeline(dvcl_singlehead_smnist_coreset, wandb_log=True)
   # model = model_pipeline(dsi_singlehead_smnist, wandb_log=True)
+  # single-head generative mnist
+  # model = model_pipeline(gvcl_singlehead_mnist, wandb_log=True)
 
   # wandb bug: we cant properly join existing sweeps outside of __main__ with
   # > 1 dataloader num_worker - see https://github.com/wandb/wandb/issues/8953

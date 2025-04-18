@@ -20,6 +20,7 @@ class Dgm(Generative):
     latent_dim,
     architecture,
     ntasks,
+    multihead,
     batch_size,
     learning_rate,
     classifier,
@@ -32,6 +33,7 @@ class Dgm(Generative):
       latent_dim=latent_dim,
       architecture=architecture,
       ntasks=ntasks,
+      multihead=multihead,
       batch_size=batch_size,
       learning_rate=learning_rate,
       classifier=classifier,
@@ -65,7 +67,7 @@ class Dgm(Generative):
           layer_init_logstd_std,
         ),
       )
-      for _ in range(ntasks)
+      for _ in range(ntasks if self.multihead else 1)
     )
 
   @property
@@ -81,7 +83,10 @@ class Dgm(Generative):
   @property
   def shared_bayesian_layers(self):
     return [
-      layer for layer in list(self.decoder_shared) if isinstance(layer, BayesianLinear)
+      layer
+      for layer in list(self.decoder_shared)
+      + (list(chain.from_iterable(self.decoder_heads)) if not self.multihead else [])
+      if isinstance(layer, BayesianLinear)
     ]
 
   def compute_kl_loss(self):
@@ -158,6 +163,7 @@ def generative_model_pipeline(params):
     latent_dim=params.latent_dim,
     architecture=params.architecture,
     ntasks=params.ntasks,
+    multihead=params.multihead,
     batch_size=params.batch_size,
     layer_init_logstd_mean=params.layer_init_logstd_mean,
     layer_init_logstd_std=params.layer_init_logstd_std,
