@@ -8,6 +8,13 @@ from timeit import default_timer as timer
 from functools import wraps
 
 
+def log(log_dict):
+  if wandb.run is not None:
+    wandb.log(log_dict)
+  else:
+    print(*log_dict.items(), sep='\n')
+
+
 # cursed (and ruff formatting makes it ugly)
 class infix_operator:
   def __init__(self, function, left=None, right=None):
