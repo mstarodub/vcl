@@ -13,12 +13,12 @@ class BayesianLinear(nn.Module):
     self.out_dim = out_dim
 
     # posteriors, mu - possibly overwritten with mle
-    init_mu_w = torch.empty(out_dim, in_dim)
+    init_mu_w = torch.empty(out_dim, in_dim, device=device)
     # approx. equivalent to mean=0, std=0.1 => most values are in [-0.1, 0.1]
     torch.nn.init.kaiming_normal_(init_mu_w, nonlinearity='relu')
     self.mu_w = nn.Parameter(init_mu_w)
     # kaiming already gives us reasonable variance
-    init_mu_b = torch.zeros(out_dim)
+    init_mu_b = torch.zeros(out_dim, device=device)
     self.mu_b = nn.Parameter(init_mu_b)
 
     # posteriors, sigma
