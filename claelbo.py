@@ -15,8 +15,8 @@ from bayesian_layer import BayesianLinear
 class RNVPFlow(nn.Module):
   def __init__(
     self,
-    dim_z,
     n_flows,
+    dim_z,
     n_hidden,
     dim_hidden,
   ):
@@ -60,6 +60,10 @@ class DdmFlowed(nn.Module):
     hidden_dim,
     out_dim,
     hidden_layers,
+    n_flows,
+    z_flow_dim,
+    n_flow_hidden,
+    dim_flow_hidden,
     batch_size,
     learning_rate,
     layer_init_logstd_mean,
@@ -87,11 +91,13 @@ class DdmFlowed(nn.Module):
     self.layers.append(
       BayesianLinear(hidden_dim, out_dim, layer_init_logstd_mean, layer_init_logstd_std)
     )
+    # TODO: do we want a single global flow for all layers?
+    self.flow = RNVPFlow(n_flows, z_flow_dim, n_flow_hidden, dim_flow_hidden)
 
   def forward(self, x, deterministic=False):
     for layer in self.layers:
       if isinstance(layer, BayesianLinear):
-        x = layer(x, deterministic=deterministic)
+        x = layer(x, self.flow, deterministic=deterministic)
       # activation
       else:
         x = layer(x)

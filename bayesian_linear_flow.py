@@ -32,9 +32,16 @@ class BayesianLinear(nn.Module):
     self.prior_mu_b = torch.zeros_like(self.mu_b, device=device)
     self.prior_sigma_b = torch.ones_like(self.log_sigma_b, device=device)
 
-  def forward(self, x, deterministic=False):
-    # TODO: flow mu_w from z
-    pass
+  def forward(self, x, flow, deterministic=False):
+    z0 = torch.randn(flow.dim_z, device=x.device)
+    zt, _ = flow(z0)
+    # TODO: not sure about biases, do we want to flow them?
+    mu_out = F.linear(x * zt, self.mu_w, self.mu_b)
+    sigma_out = torch.sqrt(
+      F.linear(x**2, torch.exp(2 * self.log_sigma_w), torch.exp(2 * self.log_sigma_b))
+    )
+    eps = torch.randn_like(mu_out, device=x.device)
+    return mu_out + sigma_out * eps
 
   def kl_layer(self):
     pass
